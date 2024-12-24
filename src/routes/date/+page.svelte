@@ -1,0 +1,586 @@
+<script lang="ts">
+  import { onMount } from "svelte";
+  import { invoke } from "@tauri-apps/api/core";
+  import { get, writable } from "svelte/store";
+  import { repository } from "../../biz/database";
+  import type {
+    Reservation,
+    ReservationDTO,
+    Station,
+  } from "../../biz/types";
+  import { goto, onNavigate } from "$app/navigation";
+  import type { PageData } from "../$types";
+  import { calendar } from "../../biz/calendar";
+  import { modalStore } from "../../components/modalStore";
+  import ReservationInfo from "../../components/ReservasionInfo.svelte";
+    import { load } from "@tauri-apps/plugin-store";
+    import { info } from "@tauri-apps/plugin-log";
+    import ReservasionInfo from "../../components/ReservasionInfo.svelte";
+  export let data: PageData;
+  let stations: Station[] = [];
+  const initDate = data.date ?? new Date().toISOString().split("T")[0];
+  calendar.setDate(initDate);
+  const selectedDate = calendar.selectedDate;
+  async function loadStations(loadingIndicator: number) {
+    let stations: Station[] = [];
+    stations = await repository.getAllStations();
+    console.log(`no ${loadingIndicator + 1} refreshing`);
+    return stations;
+  }
+  async function loadReservations(date: string, loadingIndicator: number) {
+    let reservations: Reservation[] = [];
+    reservations = await repository.getReservationsByDate(date);
+    console.log(`no ${loadingIndicator + 1} refreshing`);
+    return reservations;
+  }
+
+  let loadingIndicator = 0;
+  
+  async function logVisiting(u:{visit_machine:string,visit_user:string}){
+    console.log(u)
+    const vistings=await repository.getVistingByUserAndMachine(u.visit_user,u.visit_machine);
+    if(vistings.length>0){
+      vistings[0].visit_count+=1;
+      vistings[0].last_visit_time=new Date().toISOString();
+      await repository.updateVisting(vistings[0]);
+    }else{
+      await repository.createVisting({visit_user:u.visit_user,visit_machine:u.visit_machine,visit_count:1});
+    }
+  }
+  onMount(async () => {
+     // Add keyboard event listener for month navigation
+   const handleKeydown = (event: KeyboardEvent) => {
+    
+      if (event.key === "ArrowLeft") {
+        calendar.previous();
+      } else if (event.key === "ArrowRight") {
+        calendar.next();
+      }
+    };
+    window.addEventListener("keydown", handleKeydown);
+    stations = await loadStations(loadingIndicator++);
+    const store=await load("store.json");
+		let u:{machine:string,user:string}|undefined=await store.get("user");
+		if(u?.machine&&u?.user){
+			await logVisiting({visit_machine:u.machine,visit_user:u.user});
+      info("log visiting")
+		}
+  });
+</script>
+
+<main class="container">
+  <div class="fixed-header">
+    <div class="brand">
+      <img class="brand" src="/intertek.png" alt="Intertek" />
+     </div>
+   
+    <!-- <img class="brand" src="/intertek.png" alt="Intertek" /> -->
+    <div class="month-nav">
+      <button
+        class="tooltip-container"
+        aria-label="previous_day"
+        onclick={() => {
+          calendar.previous();
+        }}
+      >
+        <span class="tooltip">上一天</span>
+        <svg
+          class="logo"
+          style="fill: #94a3b8;"
+          viewBox="0 0 1024 1024"
+          version="1.1"
+          xmlns="http://www.w3.org/2000/svg"
+          width="200"
+          height="200"
+          ><path
+            d="M629.291 840.832l60.331-60.331-268.501-268.501 268.501-268.501-60.331-60.331-328.832 328.832z"
+          ></path></svg
+        >
+      </button>
+      <input
+        type="date"
+        aria-label="set_date"
+        bind:value={$selectedDate}
+        onchange={(e) => {
+          calendar.setDate(e.target?.value);
+        }}
+      />
+      <button
+        class="tooltip-container"
+        aria-label="next_day"
+        onclick={() => {
+          calendar.next();
+        }}
+      >
+        <span class="tooltip">下一天</span>
+        <svg
+          class="logo"
+          style="fill: #94a3b8;"
+          viewBox="0 0 1024 1024"
+          version="1.1"
+          xmlns="http://www.w3.org/2000/svg"
+          width="200"
+          height="200"
+          ><path
+            d="M689.621 512l-328.832-328.832-60.331 60.331 268.501 268.501-268.501 268.501 60.331 60.331z"
+          ></path></svg
+        >
+      </button>
+    </div>
+    <button
+      aria-label="calendar_view"
+      class="tooltip-container"
+      onclick={() => goto("/")}
+    >
+      <span class="tooltip">返回月度视图</span>
+      <svg
+        class="logo"
+        style="fill: #fbc400;"
+        viewBox="0 0 1024 1024"
+        version="1.1"
+        xmlns="http://www.w3.org/2000/svg"
+        width="200"
+        height="200"
+        ><path
+          d="M109.714286 950.857143l164.571429 0 0-164.571429-164.571429 0 0 164.571429zM310.857143 950.857143l182.857143 0 0-164.571429-182.857143 0 0 164.571429zM109.714286 749.714286l164.571429 0 0-182.857143-164.571429 0 0 182.857143zM310.857143 749.714286l182.857143 0 0-182.857143-182.857143 0 0 182.857143zM109.714286 530.285714l164.571429 0 0-164.571429-164.571429 0 0 164.571429zM530.285714 950.857143l182.857143 0 0-164.571429-182.857143 0 0 164.571429zM310.857143 530.285714l182.857143 0 0-164.571429-182.857143 0 0 164.571429zM749.714286 950.857143l164.571429 0 0-164.571429-164.571429 0 0 164.571429zM530.285714 749.714286l182.857143 0 0-182.857143-182.857143 0 0 182.857143zM329.142857 256l0-164.571429q0-7.460571-5.412571-12.873143t-12.873143-5.412571l-36.571429 0q-7.460571 0-12.873143 5.412571t-5.412571 12.873143l0 164.571429q0 7.460571 5.412571 12.873143t12.873143 5.412571l36.571429 0q7.460571 0 12.873143-5.412571t5.412571-12.873143zM749.714286 749.714286l164.571429 0 0-182.857143-164.571429 0 0 182.857143zM530.285714 530.285714l182.857143 0 0-164.571429-182.857143 0 0 164.571429zM749.714286 530.285714l164.571429 0 0-164.571429-164.571429 0 0 164.571429zM768 256l0-164.571429q0-7.460571-5.412571-12.873143t-12.873143-5.412571l-36.571429 0q-7.460571 0-12.873143 5.412571t-5.412571 12.873143l0 164.571429q0 7.460571 5.412571 12.873143t12.873143 5.412571l36.571429 0q7.460571 0 12.873143-5.412571t5.412571-12.873143zM987.428571 219.428571l0 731.428571q0 29.696-21.723429 51.419429t-51.419429 21.723429l-804.571429 0q-29.696 0-51.419429-21.723429t-21.723429-51.419429l0-731.428571q0-29.696 21.723429-51.419429t51.419429-21.723429l73.142857 0 0-54.857143q0-37.741714 26.843429-64.585143t64.585143-26.843429l36.571429 0q37.741714 0 64.585143 26.843429t26.843429 64.585143l0 54.857143 219.428571 0 0-54.857143q0-37.741714 26.843429-64.585143t64.585143-26.843429l36.571429 0q37.741714 0 64.585143 26.843429t26.843429 64.585143l0 54.857143 73.142857 0q29.696 0 51.419429 21.723429t21.723429 51.419429z"
+        ></path></svg
+      >
+    </button>
+  </div>
+
+  <div class="table-container">
+    <div class="table-wrapper">
+      {#await loadReservations($selectedDate, loadingIndicator)}
+        <div style="display: flex; justify-content: center; align-items: center; height: 100%;">Loading...</div>
+      {:then reservations}
+        <table>
+          <thead>
+            <tr>
+              <th class="sticky-column">时间</th>
+              {#each stations as station}
+                <th
+                  class="fixed-width tooltip-container"
+                  class:station-unavailable={station.status !== "in_service"}
+                >
+                  <span class="tooltip">点击查看工位详情</span>
+                  <a title={station.name} href={`/station?stationId=${station.id}`} class="link">
+                    {station.short_name}
+                  </a>
+                </th>
+              {/each}
+            </tr>
+          </thead>
+          <tbody>
+            {#each ["9:30-12:00", "13:00-15:00", "15:00-17:30", "18:00-20:30", "20:30-23:59"] as timeSlot, idx}
+              <tr>
+                <td class="sticky-column">{timeSlot}</td>
+                {#each stations as station}
+                  <td
+                    class="fixed-width"
+                    class:station-unavailable={station.status !== "in_service"}
+                    style="text-align:left;font-size:12px;"
+                  >
+                    {#if station.status !== "in_service"}
+                      <button
+                        class="tooltip-container unavailable-cell"
+                        onclick={() => alert(`该工位当前状态：维护中`)}
+                      >
+                        <span class="tooltip">工位不可用</span>
+                        <svg
+                          class="logo"
+                          style="fill: #fbc400;opacity:0.6"
+                          viewBox="0 0 1024 1024"
+                          version="1.1"
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="200"
+                          height="200"
+                          ><path
+                            d="M821.344 458.656v106.688H202.656v-106.688h618.688zM1024 512c0 282.784-229.216 512-512 512S0 794.784 0 512 229.216 0 512 0s512 229.216 512 512z m-85.344 0c0-235.264-191.392-426.656-426.656-426.656S85.344 276.736 85.344 512 276.736 938.656 512 938.656 938.656 747.264 938.656 512z"
+                          ></path></svg
+                        >
+                      </button>
+                    {:else}
+                      {#await Promise.resolve(reservations.filter((f) => f.time_slot === `T${idx + 1}` && f.station_id === station.id)[0])}
+                        <div>Loading...</div>
+                      {:then reservation}
+                        {#if reservation}
+                          <button
+                            class="tooltip-container"
+                            onclick={() =>
+                              modalStore.open(ReservasionInfo, {
+                                onNegative: () => modalStore.close(),
+                                reservation: reservation,
+                              })}
+                          >
+                            <span class={idx===3?"tooltip-top":"tooltip"}>点击查看预约</span>
+                            <div style="font-size: smaller; text-align: left;">
+                              <span style="font-weight:bold;">客户：</span
+                              >{reservation.client_name}
+                            </div>
+                            <div style="font-size: smaller; text-align: left;">
+                              <span style="font-weight:bold;">产品：</span
+                              >{reservation.product_name}
+                            </div>
+                            {#if reservation.job_no}
+                              <div
+                                style="font-size: smaller; text-align: left;"
+                              >
+                                <span style="font-weight:bold;">Job no.:</span
+                                >{reservation.job_no}
+                              </div>
+                            {/if}
+                          </button>
+                        {:else}
+                          <button
+                            class="tooltip-container coffee-btn"
+                            aria-label="open_new"
+                            
+                          >
+                          {#if $selectedDate<new Date().toISOString().split('T')[0]}
+                            <span  class={idx===4?"tooltip-top":"tooltip"}>已无法预约</span>
+                            {:else}
+                            <span  class={idx===4?"tooltip-top":"tooltip"}>等待预约</span>
+                            {/if}
+                            <svg
+                              class="logo spare"
+                              viewBox="0 0 1024 1024"
+                              version="1.1"
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="200"
+                              height="200"
+                              ><path
+                                d="M797.994667 448.725333v123.306667a243.626667 243.626667 0 0 1-243.626667 243.669333H371.626667A243.626667 243.626667 0 0 1 128 572.074667V358.826667c0-16.810667 13.653333-30.421333 30.464-30.421334h119.381333C292.096 319.146667 298.666667 305.408 298.666667 285.184c0-13.098667-6.058667-23.253333-25.344-44.928l-3.541334-4.010667c-23.125333-26.112-32.725333-42.538667-32.554666-67.114666 0.256-37.333333 15.658667-65.536 45.482666-81.322667a21.333333 21.333333 0 0 1 19.968 37.717333c-15.232 8.064-22.613333 21.589333-22.784 43.946667-0.085333 10.581333 5.376 19.925333 21.845334 38.485333l3.498666 3.968c25.984 29.226667 36.096 46.08 36.096 73.258667 0 16.128-2.986667 30.634667-8.874666 43.264h116.010666c14.250667-9.301333 20.864-23.04 20.864-43.264 0-13.098667-6.058667-23.253333-25.344-44.928l-3.541333-4.010667c-23.125333-26.112-32.725333-42.538667-32.554667-67.114666 0.256-37.333333 15.658667-65.536 45.482667-81.322667a21.333333 21.333333 0 1 1 19.968 37.717333c-15.232 8.064-22.613333 21.589333-22.784 43.946667-0.085333 10.581333 5.376 19.925333 21.845333 38.485333l3.498667 3.968c25.984 29.226667 36.096 46.08 36.096 73.258667 0 16.128-2.986667 30.634667-8.874667 43.264h116.010667c14.250667-9.301333 20.864-23.04 20.864-43.264 0-13.098667-6.058667-23.253333-25.344-44.928l-3.541333-4.010667c-23.125333-26.112-32.725333-42.538667-32.554667-67.114666 0.256-37.333333 15.658667-65.536 45.482667-81.322667a21.333333 21.333333 0 1 1 19.968 37.717333c-15.232 8.064-22.613333 21.589333-22.784 43.946667-0.085333 10.581333 5.376 19.925333 21.845333 38.485333l3.498667 3.968c25.984 29.226667 36.096 46.08 36.096 73.258667 0 16.128-2.986667 30.634667-8.874667 43.264h93.696c16.853333 0 30.464 13.610667 30.464 30.421333v46.976A149.333333 149.333333 0 1 1 810.666667 704a21.333333 21.333333 0 1 1 0-42.666667 106.666667 106.666667 0 1 0-12.672-212.608zM213.333333 917.333333a21.333333 21.333333 0 1 1 0-42.666666h512a21.333333 21.333333 0 1 1 0 42.666666H213.333333z"
+                              ></path></svg
+                            >
+                          </button>
+                        {/if}
+                      {/await}
+                    {/if}
+                  </td>
+                {/each}
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {/await}
+    </div>
+  </div>
+</main>
+
+<style>
+  .container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh; /* 占满整个视口高度 */
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f0f4f8;
+    justify-content: center;
+    width: 100%;
+  }
+  .logo {
+    width: 25px;
+    height: 25px;
+  }
+  .brand{
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.3rem;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+  }
+
+  .brand:hover {
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  .brand:active {
+    transform: translateY(0) scale(0.98);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  }
+  .fixed-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background-color: #f8f9fa;
+    z-index: 100;
+    padding: 1.2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  }
+
+  .tooltip-container {
+    position: relative;
+  }
+
+  .tooltip {
+    position: absolute;
+    bottom: -35px;
+    left: 50%;
+    transform: translateX(-50%) translateY(10px);
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+  }
+  .tooltip-top {
+    top: -35px;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%) translateY(10px);
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+  }
+  /* 添加小三角形 */
+  .tooltip::before {
+    content: "";
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    transform: translateX(-50%) rotate(45deg);
+    width: 8px;
+    height: 8px;
+    background-color: rgba(0, 0, 0, 0.8);
+  }
+  .tooltip-top::before {
+    content: "";
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background-color: rgba(0, 0, 0, 0.8);
+    bottom: -4px;
+    left: 50%;
+    transform: translateX(-50%) rotate(45deg);
+  }
+  .tooltip-container:hover .tooltip {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+  }
+  .tooltip-container:hover .tooltip-top {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+  }
+  .fixed-header button {
+    background-color: transparent;
+    border: none;
+    outline: none;
+    padding: 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .fixed-header button:hover {
+    background-color: rgba(251, 196, 0, 0.1);
+    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(251, 196, 0, 0.2);
+  }
+  .fixed-header button:active {
+    transform: translateY(0);
+    background-color: rgba(251, 196, 0, 0.15);
+    box-shadow: 0 1px 2px rgba(251, 196, 0, 0.1);
+  }
+  .fixed-header button:focus {
+    outline: 2px solid rgba(251, 196, 0, 0.3);
+    outline-offset: 2px;
+  }
+  .month-nav {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 24px;
+  }
+
+  .month-nav button {
+    background: none;
+    border: 1px solid #e0e0e0;
+    padding: 4px 4px;
+    border-radius: 6px;
+    color: #666;
+    transition: all 0.3s ease;
+  }
+
+  .month-nav button:hover {
+    background-color: #f0f0f0;
+    color: #333;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  .month-nav input {
+    padding: 6px 10px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    color: #94a3b8;
+    font-size: 1rem;
+    min-width: 150px;
+    font-family: Arial, Helvetica, sans-serif;
+    height: 2rem;
+    transition: all 0.3s ease;
+  }
+
+  .month-nav input:hover {
+    border-color: #d0d0d0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    transform: translateY(-1px);
+  }
+
+  .month-nav input:focus {
+    outline: none;
+    border-color: #fbc400;
+    box-shadow: 0 0 0 3px rgba(251, 196, 0, 0.1);
+  }
+
+  .table-container {
+    flex: 1; /* 占据剩余空间 */
+    margin-top: 60px; /* 留出操作栏的空间 */
+    padding: 20px;
+    display: flex;
+    align-items: stretch; /* 使表格占满容器高度 */
+  }
+
+  .table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    position: relative;
+  }
+
+  table {
+    width: auto; /* 改为自动宽度 */
+    height: 100%; /* 表格高度100% */
+    border-collapse: collapse;
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    margin: 0 auto; /* 水平居中 */
+  }
+
+  tbody {
+    height: 100%; /* tbody高度100% */
+  }
+
+  tr {
+    height: 20%; /* 每行平均分配高度 */
+  }
+
+  .fixed-width {
+    width: 100px;
+    min-width: 100px;
+    max-width: 100px;
+    word-wrap: break-word;
+  }
+
+  .sticky-column {
+    position: sticky;
+    left: 0;
+    background-color: #fff;
+    z-index: 1;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 0.8rem;
+    font-weight: 600;
+    /* 添加阴影效果以区分固定列 */
+    box-shadow: 2px 0 4px rgba(0, 0, 0, 0.1);
+  }
+
+  th,
+  td {
+    border: 1px solid #ddd;
+    padding: 12px;
+    text-align: center;
+    height: 50px; /* 设置单元格高度 */
+  }
+
+  th {
+    background-color: #f7f9fc;
+  }
+
+  /* 确保固定列的表头样式正确 */
+  th.sticky-column {
+    background-color: #f7f9fc;
+    z-index: 2;
+  }
+
+  td:hover {
+    background-color: #f1f1f1;
+  }
+  td > button {
+    background-color: transparent;
+    border: none;
+    outline: none;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: start;
+  }
+  .coffee-btn {
+    align-items: center;
+  }
+  td > button:hover {
+    /* background-color: #94a3b8; */
+    color: #626058;
+  }
+
+  .link {
+    text-decoration: none;
+    color: gray;
+    font-family: Arial, Helvetica, sans-serif;
+  }
+
+  .station-unavailable {
+    background-color: #f8d7da !important; /* 浅红色背景 */
+  }
+
+  .unavailable-cell {
+    color: #721c24;
+    background-color: transparent;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: not-allowed;
+  }
+
+  .unavailable-cell:hover {
+    background-color: rgba(114, 28, 36, 0.1);
+  }
+
+  /* 确保固定列的表头样式正确 */
+  th.sticky-column.station-unavailable {
+    background-color: #f8d7da;
+    z-index: 2;
+  }
+
+  .spare {
+    fill: #f9fafb;
+    width: 3rem;
+    height: 3rem;
+  }
+  .spare:hover {
+    fill: #fbc400;
+  }
+</style>
