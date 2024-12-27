@@ -1,7 +1,8 @@
+import type { SvelteComponent } from 'svelte';
 import { writable } from 'svelte/store';
 
 function createModalStore() {
-  const { subscribe, set, update } = writable({
+  const { subscribe, set, update } = writable<{ show: boolean; component: any; props: any }>({
     show: false,
     component: null,
     props: {}
@@ -9,7 +10,7 @@ function createModalStore() {
 
   return {
     subscribe,
-    open: (component: any, props = {}) => {
+    open: (component: any, props:any = {}) => {
       set({ show: true, component, props });
     },
     close: () => {

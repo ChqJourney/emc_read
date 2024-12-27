@@ -1,22 +1,22 @@
 import Database from '@tauri-apps/plugin-sql';
 import { writable } from 'svelte/store';
-import type { Reservation, ReservationDTO, Station, StationDTO, Test, TestDTO, Visting, VistingDTO } from '../types/interfaces';
+import type { Reservation, ReservationDTO, Station, StationDTO, Test, TestDTO, Visting, VistingDTO } from '../biz/types';
 import { generateLargeAmountReservationData, generateLargeAmountStationData, generateLargeAmountVistingData } from './seedData';
 import { BaseDirectory, readTextFile } from '@tauri-apps/plugin-fs';
+import { load } from '@tauri-apps/plugin-store';
 
 // 创建一个可写的 store 来存储数据库连接
 const db = writable<Database | null>(null);
 
 // 初始化数据库连接
 async function initDatabase() {
-    const settingsStr = await readTextFile("settings.json", { baseDir: BaseDirectory.AppData });
-    const setting = JSON.parse(settingsStr);
-    const remote_source = setting["remote_source"];
+    const store=await load("settings.json");
+    const remote_source = await store.get<string>("remote_source");
     console.log(remote_source);
     if (!remote_source || remote_source.trim() === "") {
         throw new Error("未设置远程数据源");
     }
-    const dbString = `sqlite:${remote_source}data\\data.db?mode=rwc&cache=private`;
+    const dbString = `sqlite:${remote_source}\\data\\data.db?mode=rwc&cache=private`;
     // let connection_string=await invoke('get_db_connection_string');
     try {
         const database = await Database.load(dbString);
@@ -95,8 +95,6 @@ class Repository {
     // 示例：获取预约列表
     async getReservationsByDate(date: string): Promise<Reservation[]> {
         const database = await this.getDb();
-
-        // console.log(database)
         return await database.select(
             'SELECT * FROM reservations WHERE reservation_date = $1',
             [date]
@@ -228,7 +226,7 @@ class Repository {
     //查询工位列表
     async getAllStations(): Promise<Station[]> {
         const database = await this.getDb();
-        return await database.select('SELECT * FROM stations order by sequence_no asc,created_on desc');
+        return await database.select('SELECT * FROM stations order by created_on desc');
     }
     async maxStationSeq(): Promise<{ max_no: number }[]> {
         const database = await this.getDb();
@@ -237,15 +235,15 @@ class Repository {
     async createStation(station: StationDTO) {
         const database = await this.getDb();
         return await database.execute(
-            `INSERT INTO stations(name,short_name,description,photo_path,status,sequence_no) VALUES($1, $2, $3, $4, $5,$6)`,
-            [station.name, station.short_name, station.description, station.photo_path, station.status, station.sequence_no]
+            `INSERT INTO stations(name,short_name,description,photo_path,status) VALUES($1, $2, $3, $4, $5)`,
+            [station.name, station.short_name, station.description, station.photo_path, station.status]
         );
     }
     async updateStation(station: Station) {
         const database = await this.getDb();
         return await database.execute(
-            `UPDATE stations SET name=$1,short_name=$2,description=$3,photo_path=$4,status=$5,sequence_no=$6 WHERE id=$7`,
-            [station.name, station.short_name, station.description, station.photo_path, station.status, station.sequence_no, station.id]
+            `UPDATE stations SET name=$1,short_name=$2,description=$3,photo_path=$4,status=$5 WHERE id=$6`,
+            [station.name, station.short_name, station.description, station.photo_path, station.status, station.id]
         );
     }
     async getStationNameById(id: number): Promise<string> {

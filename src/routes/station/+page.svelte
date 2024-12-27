@@ -11,9 +11,9 @@
 	import { onMount } from "svelte";
 	import { repository } from "../../biz/database";
     import { modalStore } from "../../components/modalStore";
-	import ReservationInfo from "../../components/ReservasionInfo.svelte";
+	import ReservationInfo from "../../components/ReservationInfo.svelte";
     import { load } from "@tauri-apps/plugin-store";
-    import ReservasionInfo from "../../components/ReservasionInfo.svelte";
+    import ReservasionInfo from "../../components/ReservationInfo.svelte";
 
 	let { data }: { data: PageData } = $props();
 	let { stationId }: { stationId: string } = data;
