@@ -149,7 +149,7 @@ const getStationName=async(id:number)=>{
 
 <style>
   .reservation-info {
-    padding: 0.5rem 1.5rem 1.5rem 1.5rem;
+    padding: 2.5rem 1.5rem 2.5rem 1.5rem;
     color: #333;
     position: relative;
     font-family: Arial, sans-serif;

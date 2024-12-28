@@ -15,13 +15,14 @@
     import { getGlobal } from "../../biz/globalStore";
     import ReservationInfo from "../../components/ReservationInfo.svelte";
     import { errorHandler } from "../../biz/errorHandler";
+    import { exists } from "@tauri-apps/plugin-fs";
 
 	let { data }: { data: PageData } = $props();
 	let { stationId }= data;
 	console.log(stationId);
 	// 使用calendar实例的store
 	const currentMonth = calendar.currentMonth;
-	let selectedDate = writable("");
+	let selectedDate = $derived(calendar.selectedDate);
 	// 加载月度预约数据
 	async function loadMonthData(): Promise<Reservation[]> {
 		// 获取整月的预约数据
@@ -50,33 +51,62 @@
       await repository.createVisting({visit_user:u.visit_user,visit_machine:u.visit_machine,visit_count:1});
     }
   }
-	onMount(async () => {
-		const store=await load("store.json");
-		let u:{machine:string,user:string}|undefined=await store.get("user");
-		if(u?.machine&&u?.user){
-			await logVisiting({visit_machine:u.machine,visit_user:u.user});
-		}
-	});
+	
+	
+	
+	let photoAvailable = $state(false);
 	async function loadStationInfo(stationId: string): Promise<Station> {
 		console.log(stationId);
 		const stationInfos: Station[] = await repository.getStationById(
 			parseInt(stationId),
 		);
 		console.log(stationInfos);
+		photoAvailable = await exists(getPhotoPath(stationInfos[0].photo_path));
+		console.log(photoAvailable);
 		return stationInfos[0];
 	}
-	
-	let loadingIndicator = 0;
-	
-	const handlePhotoPath=(path:string)=>{
-		if(path.includes(":")){
 
-			return convertFileSrc(path);
-		}else{
-			const remote_source=getGlobal("remote_source");
-			return convertFileSrc(`${remote_source}\\station_pics\\${path}`);
+	const handlePhotoPath = (path: string) => {
+		return convertFileSrc(getPhotoPath(path));
+	};
+	const getPhotoPath = (path: string) => {
+		if (path.includes(":")) {
+			return path;
+		} else {
+			const remote_source = getGlobal("remote_source");
+			return `${remote_source}\\station_pics\\${path}`;
 		}
+	};
+	// Add keyboard event listener for day navigation
+	const handleKeydown = (event: KeyboardEvent) => {
+		// 如果modal正在显示，且不是在输入框内
+		if ($modalStore.show) {
+			const target = event.target as HTMLElement;
+			const isInput =
+				target.tagName === "INPUT" ||
+				target.tagName === "TEXTAREA" ||
+				target.isContentEditable;
+
+			// 如果不是在输入框内，才阻止默认行为
+			if (
+				!isInput &&
+				(event.key === "ArrowLeft" || event.key === "ArrowRight")
+			) {
+				event.preventDefault();
+			}
+			return;
 		}
+
+		if (event.key === "ArrowLeft") {
+			calendar.changeMonth(-1);
+		} else if (event.key === "ArrowRight") {
+			calendar.changeMonth(1);
+		}
+	};
+	onMount(() => {
+		window.addEventListener("keydown", handleKeydown);
+		return () => window.removeEventListener("keydown", handleKeydown);
+	});
 </script>
 
 <div class="container">
@@ -97,11 +127,27 @@
 								{stationInfo.description ?? "Unknown"}
 							</p>
 						</div>
-						<img
-							src={handlePhotoPath(stationInfo.photo_path)}
-							class="station-image"
-							alt="station_pic"
-						/>
+						{#if photoAvailable}
+							<img
+								src={handlePhotoPath(stationInfo.photo_path)}
+								class="station-image"
+								alt="station_pic"
+							/>
+						{:else}
+							<svg
+								class="image-placeholder"
+								viewBox="0 0 24 24"
+								fill="none"
+								xmlns="http://www.w3.org/2000/svg"
+							>
+								<path
+									d="M4 16L8.586 11.414C8.96106 11.0391 9.46967 10.8284 10 10.8284C10.5303 10.8284 11.0389 11.0391 11.414 11.414L16 16M14 14L15.586 12.414C15.9611 12.0391 16.4697 11.8284 17 11.8284C17.5303 11.8284 18.0389 12.0391 18.414 12.414L20 14M14 8H14.01M6 20H18C18.5304 20 19.0391 19.7893 19.4142 19.4142C19.7893 19.0391 20 18.5304 20 18V6C20 5.46957 19.7893 4.96086 19.4142 4.58579C19.0391 4.21071 18.5304 4 18 4H6C5.46957 4 4.96086 4.21071 4.58579 4.58579C4.21071 4.96086 4 5.46957 4 6V18C4 18.5304 4.21071 19.0391 4.58579 19.4142C4.96086 19.7893 5.46957 20 6 20Z"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+							</svg>
+						{/if}
 					</div>
 				{/if}
 			{/await}
@@ -110,28 +156,17 @@
 				class="tooltip-container"
 				onclick={() => goto(`/date?${$selectedDate}`)}
 			>
-				<span class="tooltip">返回工位列表</span>
+				<span class="tooltip-bottom">返回工位列表</span>
 				<svg
 					class="home_svg"
-					viewBox="0 0 1024 1024"
+					
+					viewBox="0 0 1280 1024"
 					version="1.1"
 					xmlns="http://www.w3.org/2000/svg"
 					width="200"
 					height="200"
 					><path
-						d="M853.333333 1024 170.666667 1024c-93.866667 0-170.666667-76.8-170.666667-170.666667L0 213.333333c0-25.6 17.066667-42.666667 42.666667-42.666667l938.666667 0c25.6 0 42.666667 17.066667 42.666667 42.666667l0 640C1024 947.2 947.2 1024 853.333333 1024zM85.333333 256l0 597.333333c0 46.933333 38.4 85.333333 85.333333 85.333333l682.666667 0c46.933333 0 85.333333-38.4 85.333333-85.333333L938.666667 256 85.333333 256z"
-					></path><path d="M512 256"></path><path
-						d="M981.333333 213.333333 42.666667 213.333333 42.666667 170.666667c0-72.533333 55.466667-128 128-128l682.666667 0c72.533333 0 128 55.466667 128 128L981.333333 213.333333z"
-					></path><path
-						d="M981.333333 256 42.666667 256C17.066667 256 0 238.933333 0 213.333333L0 170.666667c0-93.866667 76.8-170.666667 170.666667-170.666667l682.666667 0c93.866667 0 170.666667 76.8 170.666667 170.666667l0 42.666667C1024 238.933333 1006.933333 256 981.333333 256zM85.333333 170.666667l853.333333 0c0-46.933333-38.4-85.333333-85.333333-85.333333L170.666667 85.333333C123.733333 85.333333 85.333333 123.733333 85.333333 170.666667z"
-					></path><path
-						d="M298.666667 1024c-25.6 0-42.666667-17.066667-42.666667-42.666667L256 213.333333c0-25.6 17.066667-42.666667 42.666667-42.666667s42.666667 17.066667 42.666667 42.666667l0 768C341.333333 1006.933333 324.266667 1024 298.666667 1024z"
-					></path><path d="M42.666667 341.333333"></path><path
-						d="M981.333333 341.333333"
-					></path><path
-						d="M981.333333 512 42.666667 512c-25.6 0-42.666667-17.066667-42.666667-42.666667s17.066667-42.666667 42.666667-42.666667l938.666667 0c25.6 0 42.666667 17.066667 42.666667 42.666667S1006.933333 512 981.333333 512z"
-					></path><path
-						d="M981.333333 768 42.666667 768c-25.6 0-42.666667-17.066667-42.666667-42.666667s17.066667-42.666667 42.666667-42.666667l938.666667 0c25.6 0 42.666667 17.066667 42.666667 42.666667S1006.933333 768 981.333333 768z"
+						d="M1271.872 986.624c10.944-9.344 17.6-15.04-26.368-198.656-76.288-317.888-378.816-523.008-717.504-553.6V0L0 410.048l528 410.048V585.792c219.52-16.64 412.352 2.496 541.44 141.184 63.808 68.48 140.608 204.16 159.04 244.096 2.56 5.632 7.424 16.064 19.008 20.032l14.016 4.48 10.368-8.96z"
 					></path></svg
 				>
 			</button>
@@ -152,7 +187,6 @@
 					<span class="tooltip">上个月</span>
 					<svg
 						class="logo"
-						style="fill: #94a3b8;"
 						viewBox="0 0 1024 1024"
 						version="1.1"
 						xmlns="http://www.w3.org/2000/svg"
@@ -176,7 +210,6 @@
 					<span class="tooltip">下个月</span>
 					<svg
 						class="logo"
-						style="fill: #94a3b8;"
 						viewBox="0 0 1024 1024"
 						version="1.1"
 						xmlns="http://www.w3.org/2000/svg"
@@ -217,62 +250,53 @@
 						>
 						{#await new Promise<Reservation[]>(resolve=>resolve(monthlyReservations.filter(f=>f.reservation_date===date))) then reservations}
 						<div style="display: flex;flex-direction:column;">
-							<div onclick={async () => {
-								selectedDate.set(date);
-								if(reservations.filter(f=>f.time_slot==="T1").length>0){
-									modalStore.open(ReservationInfo,{
-										onNegative:()=>modalStore.close(),
-										reservation:reservations.filter(f=>f.time_slot==="T1")[0]
-									});
-								}else{
-									errorHandler.showInfo("没有预订信息")
-								}
-							}} class="slot tooltip-container" class:fill_slot={reservations.filter(f=>f.time_slot==="T1").length>0}>{#if reservations.filter(f=>f.time_slot==="T1").length>0}<span class="tooltip">{reservations.filter(f=>f.time_slot==="T1")[0]?.client_name}</span>{/if}</div>
-							<div onclick={async () => {
-								selectedDate.set(date);
-								if(reservations.filter(f=>f.time_slot==="T2").length>0){
-									modalStore.open(ReservationInfo,{
-										onNegative:()=>modalStore.close(),
-										reservation:reservations.filter(f=>f.time_slot==="T2")[0]
-									});
-								}else{
-									errorHandler.showInfo("没有预订信息")
-								}
-							}} class="slot tooltip-container" class:fill_slot={reservations.filter(f=>f.time_slot==="T2").length>0}>{#if reservations.filter(f=>f.time_slot==="T2").length>0}<span class="tooltip">{reservations.filter(f=>f.time_slot==="T2")[0]?.client_name}</span>{/if}</div>
-							<div onclick={async () => {
-								selectedDate.set(date);
-								if(reservations.filter(f=>f.time_slot==="T3").length>0){
-									modalStore.open(ReservationInfo,{
-										onNegative:()=>modalStore.close(),
-										reservation:reservations.filter(f=>f.time_slot==="T3")[0]
-									});
-								}else{
-									errorHandler.showInfo("没有预订信息")
-								}
-							}} class="slot tooltip-container" class:fill_slot={reservations.filter(f=>f.time_slot==="T3").length>0}>{#if reservations.filter(f=>f.time_slot==="T3").length>0}<span class="tooltip">{reservations.filter(f=>f.time_slot==="T3")[0]?.client_name}</span>{/if}</div>
-							<div onclick={async () => {
-								selectedDate.set(date);
-								if(reservations.filter(f=>f.time_slot==="T4").length>0){
-									modalStore.open(ReservationInfo,{
-										onNegative:()=>modalStore.close(),
-										reservation:reservations.filter(f=>f.time_slot==="T4")[0]
-									});
-								}else{
-									errorHandler.showInfo("没有预订信息")
-								}
-							}} class="slot tooltip-container" class:fill_slot={reservations.filter(f=>f.time_slot==="T4").length>0}>{#if reservations.filter(f=>f.time_slot==="T4").length>0}<span class="tooltip">{reservations.filter(f=>f.time_slot==="T4")[0]?.client_name}</span>{/if}</div>
-							<div onclick={async () => {
-								selectedDate.set(date);
-								if(reservations.filter(f=>f.time_slot==="T5").length>0){
-									modalStore.open(ReservationInfo,{
-										onNegative:()=>modalStore.close(),
-										reservation:reservations.filter(f=>f.time_slot==="T5")[0]
-									});
-								}else{
-									errorHandler.showInfo("没有预订信息")
-								}
-							}} class="slot tooltip-container" class:fill_slot={reservations.filter(f=>f.time_slot==="T5").length>0}>{#if reservations.filter(f=>f.time_slot==="T5").length>0}<span class="tooltip">{reservations.filter(f=>f.time_slot==="T5")[0]?.client_name}</span>{/if}</div>
-					</div>
+							{#each ["T1", "T2", "T3", "T4", "T5"] as t}
+										<div
+											onclick={async (e) => {
+												
+												calendar.setDate(
+													date,
+												);
+												console.log($selectedDate)
+												if (
+													reservations.filter(
+														(f) =>
+															f.time_slot === t,
+													).length > 0
+												) {
+													modalStore.open(
+														ReservationInfo,
+														{
+															
+															onNegative: () =>
+																modalStore.close(),
+															reservation:
+																reservations.filter(
+																	(f) =>
+																		f.time_slot ===
+																		t,
+																)[0],
+														},
+													);
+												} else {
+													errorHandler.showInfo("暂无预约")
+												}
+											}}
+											class="slot tooltip-container"
+											class:fill_slot={reservations.filter(
+												(f) => f.time_slot === t,
+											).length > 0}
+										>
+											{#if reservations.filter((f) => f.time_slot === t).length > 0}<span
+													class="tooltip"
+													>{reservations.filter(
+														(f) =>
+															f.time_slot === t,
+													)[0]?.client_name}</span
+												>{/if}
+										</div>
+									{/each}
+							</div>
 						{/await}
 							<div class="day_no" style="z-index: 0;">
 
@@ -300,7 +324,7 @@
 		width: 100%;
 	}
 	.home_svg {
-		fill: #94a3b8;
+		fill: #fbc400;
 		width: 2.5rem;
 		height: 2.5rem;
 	}
@@ -324,7 +348,9 @@
 	}
 	.station-info button {
 		background: none;
-		border: 1px solid #e0e0e0;
+		/* border: 1px solid #e0e0e0; */
+		border: none;
+		outline: none;
 		padding: 6px 8px;
 		border-radius: 6px;
 		color: #666;
@@ -333,15 +359,17 @@
 	}
 
 	.station-info button:hover {
-		background-color: #f0f0f0;
+		background-color: rgba(251, 196, 0, 0.1);
+		transform: translateY(-2px);
+		box-shadow: 0 2px 8px rgba(251, 196, 0, 0.2);
 		color: #333;
 		transform: translateY(-1px);
 		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 	}
 	.logo {
-		height: 30px;
-		width: 30px;
-		margin: 15px;
+		height: 25px;
+		width: 25px;
+		fill: #fbc400;
 	}
 	.brand {
 		height: 4rem;
@@ -374,6 +402,14 @@
 		height: 100px;
 		border-radius: 12px;
 		margin-right: 4rem;
+		fill: #fbc400;
+	}
+	.image-placeholder {
+		width: 100px;
+		height: 100px;
+		border-radius: 12px;
+		margin-right: 4rem;
+		stroke: #837e6a;
 	}
 
 	.calendar-container {
@@ -426,6 +462,39 @@
 		visibility: visible;
 		transform: translateX(50%) translateY(0%);
 	}
+	.tooltip-bottom {
+		position: absolute;
+		left: -120%;
+		top: 100%;
+		transform: translateX(50%);
+		background-color: rgba(0, 0, 0, 0.8);
+		color: white;
+		padding: 6px 12px;
+		border-radius: 4px;
+		font-size: 0.85rem;
+		white-space: nowrap;
+		opacity: 0;
+		visibility: hidden;
+		transition: all 0.3s ease;
+		z-index: 50;
+		margin-bottom: 10px;
+	}
+	.tooltip-bottom::before {
+		content: "";
+		position: absolute;
+		top: -4px;
+		left: 50%;
+		transform: translateX(-50%) rotate(45deg);
+		width: 8px;
+		height: 8px;
+		background-color: rgba(0, 0, 0, 0.8);
+		z-index: 50;
+	}
+	.tooltip-container:hover .tooltip-bottom {
+		opacity: 1;
+		visibility: visible;
+		transform: translateX(50%) translateY(0%);
+	}
 	.month-nav {
 		display: flex;
 		justify-content: center;
@@ -471,6 +540,13 @@
 		outline: none;
 		border-color: #fbc400;
 		box-shadow: 0 0 0 3px rgba(251, 196, 0, 0.1);
+	}
+	.month-nav input::-webkit-calendar-picker-indicator {
+		filter: invert(70%) sepia(70%) saturate(1000%) hue-rotate(360deg);
+		cursor: pointer;
+		width: 1.5rem;
+		height: 1.5rem;
+		padding: 0px;
 	}
 	.calendar {
 		width: min(90vw, 800px); /* 日历最大宽度限制 */
@@ -536,6 +612,14 @@
 	.fill_slot{
 		background-color: #bc42b0;
 	}
+	.slot:hover{
+		background-color: #f8f9fa;
+		transform: translateY(-2px);
+		box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
+		border-color: #e5e7eb;
+		color: #1a1a1a;
+		z-index: 10;
+	}
 	.day:hover {
 		background-color: #f8f9fa;
 		transform: translateY(-2px);
@@ -560,7 +644,7 @@
 		font-weight: 900;
 	}
 	.selectedDay {
-		border: 2px solid #d8cd2e;
+		border: 2px solid #fbc400;
 		color: #4b5563;
 		font-weight: 900;
 	}
