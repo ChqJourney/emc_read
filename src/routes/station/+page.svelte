@@ -1,22 +1,23 @@
 <script lang="ts">
-	import type { PageData } from "./[slug]/$types";
-	import { get, writable } from "svelte/store";
+	import { writable } from "svelte/store";
 	import { goto } from "$app/navigation";
 	import { calendar } from "../../biz/calendar";
 	import type {
 		Reservation,
-		ReservationDTO,
 		Station,
 	} from "../../biz/types";
 	import { onMount } from "svelte";
 	import { repository } from "../../biz/database";
     import { modalStore } from "../../components/modalStore";
-	import ReservationInfo from "../../components/ReservationInfo.svelte";
     import { load } from "@tauri-apps/plugin-store";
-    import ReservasionInfo from "../../components/ReservationInfo.svelte";
+    import { convertFileSrc } from "@tauri-apps/api/core";
+	import type { PageData } from './$types';
+    import { getGlobal } from "../../biz/globalStore";
+    import ReservationInfo from "../../components/ReservationInfo.svelte";
+    import { errorHandler } from "../../biz/errorHandler";
 
 	let { data }: { data: PageData } = $props();
-	let { stationId }: { stationId: string } = data;
+	let { stationId }= data;
 	console.log(stationId);
 	// 使用calendar实例的store
 	const currentMonth = calendar.currentMonth;
@@ -24,7 +25,7 @@
 	// 加载月度预约数据
 	async function loadMonthData(): Promise<Reservation[]> {
 		// 获取整月的预约数据
-		const res = await repository.getReservationsByStationAndMonth($currentMonth,parseInt(stationId));
+		const res = await repository.getReservationsByStationAndMonth($currentMonth,parseInt(stationId as string));
 		console.log(res)
 		return res;
 	}
@@ -65,29 +66,17 @@
 		return stationInfos[0];
 	}
 	
-
-	
-
 	let loadingIndicator = 0;
-	const handleSubmit = async (reservationDTO:ReservationDTO) => {
-		// TODO: 处理表单提交
-		reservationDTO.reservate_by = "Patrick Chen";
-		let reservations = await repository.getReservationsByStationAndTime(
-			get(calendar.selectedDate),
-			reservationDTO.station_id,
-			reservationDTO.time_slot,
-		);
-		if (reservations.length > 0) {
-			modalStore.close();
-			alert("该工位该时间段已有预约");
-			return;
-		} else {
-			await repository.createReservation(
-				reservationDTO as Reservation,
-			);
-			loadingIndicator++;
+	
+	const handlePhotoPath=(path:string)=>{
+		if(path.includes(":")){
+
+			return convertFileSrc(path);
+		}else{
+			const remote_source=getGlobal("remote_source");
+			return convertFileSrc(`${remote_source}\\station_pics\\${path}`);
 		}
-	};
+		}
 </script>
 
 <div class="container">
@@ -95,21 +84,21 @@
 	<header class="station-info">
 		<div class="header-content">
 			<img src="/intertek.png" class="brand" alt="logo" />
-			{#await loadStationInfo(stationId)}
+			{#await loadStationInfo(stationId||"1")}
 				<div class="loading-spinner">加载中...</div>
 			{:then stationInfo}
 				{#if stationInfo}
 					<div class="station-details">
 						<div class="station-name-container">
-							<h3 class="station-name">
+							<div class="station-name">
 								{stationInfo.name ?? "Unknown"}
-							</h3>
+							</div>
 							<p class="station-description">
 								{stationInfo.description ?? "Unknown"}
 							</p>
 						</div>
 						<img
-							src={stationInfo.photo_path}
+							src={handlePhotoPath(stationInfo.photo_path)}
 							class="station-image"
 							alt="station_pic"
 						/>
@@ -123,7 +112,7 @@
 			>
 				<span class="tooltip">返回工位列表</span>
 				<svg
-                    style="fill: #fbc400;width:1.5rem;height:1.5rem;"
+					class="home_svg"
 					viewBox="0 0 1024 1024"
 					version="1.1"
 					xmlns="http://www.w3.org/2000/svg"
@@ -231,40 +220,59 @@
 							<div onclick={async () => {
 								selectedDate.set(date);
 								if(reservations.filter(f=>f.time_slot==="T1").length>0){
-									modalStore.open(ReservasionInfo,{
+									modalStore.open(ReservationInfo,{
 										onNegative:()=>modalStore.close(),
 										reservation:reservations.filter(f=>f.time_slot==="T1")[0]
 									});
+								}else{
+									errorHandler.showInfo("没有预订信息")
 								}
 							}} class="slot tooltip-container" class:fill_slot={reservations.filter(f=>f.time_slot==="T1").length>0}>{#if reservations.filter(f=>f.time_slot==="T1").length>0}<span class="tooltip">{reservations.filter(f=>f.time_slot==="T1")[0]?.client_name}</span>{/if}</div>
 							<div onclick={async () => {
 								selectedDate.set(date);
 								if(reservations.filter(f=>f.time_slot==="T2").length>0){
-									    modalStore.open(ReservasionInfo,{
+									modalStore.open(ReservationInfo,{
 										onNegative:()=>modalStore.close(),
 										reservation:reservations.filter(f=>f.time_slot==="T2")[0]
 									});
+								}else{
+									errorHandler.showInfo("没有预订信息")
 								}
 							}} class="slot tooltip-container" class:fill_slot={reservations.filter(f=>f.time_slot==="T2").length>0}>{#if reservations.filter(f=>f.time_slot==="T2").length>0}<span class="tooltip">{reservations.filter(f=>f.time_slot==="T2")[0]?.client_name}</span>{/if}</div>
 							<div onclick={async () => {
 								selectedDate.set(date);
 								if(reservations.filter(f=>f.time_slot==="T3").length>0){
-									modalStore.open(ReservasionInfo,{
+									modalStore.open(ReservationInfo,{
 										onNegative:()=>modalStore.close(),
 										reservation:reservations.filter(f=>f.time_slot==="T3")[0]
 									});
+								}else{
+									errorHandler.showInfo("没有预订信息")
 								}
 							}} class="slot tooltip-container" class:fill_slot={reservations.filter(f=>f.time_slot==="T3").length>0}>{#if reservations.filter(f=>f.time_slot==="T3").length>0}<span class="tooltip">{reservations.filter(f=>f.time_slot==="T3")[0]?.client_name}</span>{/if}</div>
 							<div onclick={async () => {
 								selectedDate.set(date);
 								if(reservations.filter(f=>f.time_slot==="T4").length>0){
-									modalStore.open(ReservasionInfo,{
+									modalStore.open(ReservationInfo,{
 										onNegative:()=>modalStore.close(),
 										reservation:reservations.filter(f=>f.time_slot==="T4")[0]
 									});
+								}else{
+									errorHandler.showInfo("没有预订信息")
 								}
 							}} class="slot tooltip-container" class:fill_slot={reservations.filter(f=>f.time_slot==="T4").length>0}>{#if reservations.filter(f=>f.time_slot==="T4").length>0}<span class="tooltip">{reservations.filter(f=>f.time_slot==="T4")[0]?.client_name}</span>{/if}</div>
-						</div>
+							<div onclick={async () => {
+								selectedDate.set(date);
+								if(reservations.filter(f=>f.time_slot==="T5").length>0){
+									modalStore.open(ReservationInfo,{
+										onNegative:()=>modalStore.close(),
+										reservation:reservations.filter(f=>f.time_slot==="T5")[0]
+									});
+								}else{
+									errorHandler.showInfo("没有预订信息")
+								}
+							}} class="slot tooltip-container" class:fill_slot={reservations.filter(f=>f.time_slot==="T5").length>0}>{#if reservations.filter(f=>f.time_slot==="T5").length>0}<span class="tooltip">{reservations.filter(f=>f.time_slot==="T5")[0]?.client_name}</span>{/if}</div>
+					</div>
 						{/await}
 							<div class="day_no" style="z-index: 0;">
 
@@ -291,7 +299,17 @@
 		background-color: #f0f2f5;
 		width: 100%;
 	}
-	
+	.home_svg {
+		fill: #94a3b8;
+		width: 2.5rem;
+		height: 2.5rem;
+	}
+	.station-description{
+		font-size: 0.8rem;
+		color: #94a3b8;
+		font-family: Arial, Helvetica, sans-serif;
+		width: 90%;
+	}
 	.station-info {
 		background: white;
 		width: 100%;
@@ -301,7 +319,7 @@
 		display: flex;
 		justify-content: center;
 		align-items: center;
-		padding: 0 1rem;
+		padding: 0 0.5rem;
 		box-sizing: border-box; /* 确保padding计入总宽度 */
 	}
 	.station-info button {
@@ -338,9 +356,11 @@
 		align-items: center;
 		width: 100%;
 		box-sizing: border-box;
-		padding: 0.5rem 0;
+		padding: 0.5rem 0.5rem;
 	}
-
+	.station-name-container {
+		padding: 0 0rem;
+	}
 	.station-details {
 		flex: 1;
 		display: flex;
@@ -363,19 +383,18 @@
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		overflow: hidden; /* 防止出现滚动条 */
-		height: calc(100vh - 80px); /* 减去顶部导航的高度 */
+		overflow-y: hidden; /* 防止出现滚动条 */
 	}
 	.tooltip-container {
 		position: relative;
+		z-index: 50;
 	}
 
-	.tooltip-container .tooltip {
+	.tooltip {
 		position: absolute;
-		left: 0;
+		right:50%;
 		bottom: 100%;
-		transform: translateY(-10px);
-		margin-bottom: 10px;
+		transform: translateX(50%);
 		background-color: rgba(0, 0, 0, 0.8);
 		color: white;
 		padding: 6px 12px;
@@ -385,26 +404,27 @@
 		opacity: 0;
 		visibility: hidden;
 		transition: all 0.3s ease;
-		z-index: 100;
+		z-index: 50;
+		margin-bottom: 10px;
 	}
 
-	/* 调整小三角形的位置 */
-	.tooltip-container .tooltip::before {
+	/* 修改小三角形的位置 */
+	.tooltip::before {
 		content: "";
 		position: absolute;
-		top: 100%;
-		left: 20px;
-		transform: rotate(45deg);
+		bottom: -4px;
+		left: 50%;
+		transform: translateX(-50%) rotate(45deg);
 		width: 8px;
 		height: 8px;
 		background-color: rgba(0, 0, 0, 0.8);
-		margin-top: -4px;
+		z-index: 50;
 	}
 
 	.tooltip-container:hover .tooltip {
 		opacity: 1;
 		visibility: visible;
-		transform: translateX(-50%) translateY(0);
+		transform: translateX(50%) translateY(0%);
 	}
 	.month-nav {
 		display: flex;
@@ -453,9 +473,9 @@
 		box-shadow: 0 0 0 3px rgba(251, 196, 0, 0.1);
 	}
 	.calendar {
-		width: min(95vw, 800px); /* 日历最大宽度限制 */
+		width: min(90vw, 800px); /* 日历最大宽度限制 */
 		aspect-ratio: 7/6; /* 保持日历的宽高比 */
-		max-height: 95%;
+		max-height: 90%;
 		background-color: white;
 		border-radius: 12px;
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
@@ -506,7 +526,7 @@
 		width: 100%;
 		min-width: 4rem;
 		max-width: 5rem;
-		min-height: 1rem;
+		min-height: 0.8rem;
 		border: 1px solid #e0e0e0;
 		border-radius: 4px;
 		margin:  2px 0;
@@ -571,116 +591,5 @@
 	:global(html) {
 		overflow: hidden;
 		width: 100%;
-	}
-
-	/* 原有的 tooltip 样式改名为 nav-tooltip */
-	.tooltip-container .tooltip {
-		position: absolute;
-		right: 10%;
-		top: -30px;
-		transform: translateX(-50%) translateY(10px);
-		background-color: rgba(0, 0, 0, 0.8);
-		color: white;
-		padding: 6px 12px;
-		border-radius: 4px;
-		font-size: 0.85rem;
-		white-space: nowrap;
-		opacity: 0;
-		visibility: hidden;
-		transition: all 0.3s ease;
-		z-index: 100;
-	}
-
-	/* 为 slot 添加专门的 tooltip 样式 */
-	.slot.tooltip-container .tooltip {
-		right: auto;
-		left: 100%;
-		top: 50%;
-		transform: translateY(-50%) translateX(10px);
-		margin-left: 5px;
-	}
-
-	/* 修改 slot tooltip 的小三角形位置 */
-	.slot.tooltip-container .tooltip::before {
-		content: "";
-		position: absolute;
-		left: -4px;
-		top: 50%;
-		transform: translateY(-50%) rotate(45deg);
-		width: 8px;
-		height: 8px;
-		background-color: rgba(0, 0, 0, 0.8);
-	}
-
-	/* slot tooltip 的悬停效果 */
-	.slot.tooltip-container:hover .tooltip {
-		opacity: 1;
-		visibility: visible;
-		transform: translateY(-50%) translateX(0);
-	}
-
-	/* 基础 tooltip 样式 */
-	.tooltip-container .tooltip {
-		position: absolute;
-		background-color: rgba(0, 0, 0, 0.8);
-		color: white;
-		padding: 6px 12px;
-		border-radius: 4px;
-		font-size: 0.85rem;
-		white-space: nowrap;
-		opacity: 0;
-		visibility: hidden;
-		transition: all 0.3s ease;
-		z-index: 100;
-	}
-
-	/* 顶部导航按钮的 tooltip */
-	.header-content .tooltip-container .tooltip {
-		bottom: 100%;
-		left: 50%;
-		transform: translateX(-50%) translateY(10px);
-		margin-bottom: 10px;
-	}
-
-	.header-content .tooltip-container:hover .tooltip {
-		opacity: 1;
-		visibility: visible;
-		transform: translateX(-50%) translateY(0);
-	}
-
-	.header-content .tooltip-container .tooltip::before {
-		content: "";
-		position: absolute;
-		top: 100%;
-		left: 50%;
-		transform: translateX(-50%) rotate(45deg);
-		width: 8px;
-		height: 8px;
-		background-color: rgba(0, 0, 0, 0.8);
-		margin-top: -4px;
-	}
-
-	/* 日历 slot 的 tooltip */
-	.slot.tooltip-container .tooltip {
-		left: 105%;
-		top: 50%;
-		transform: translateY(-50%) translateX(5px);
-	}
-
-	.slot.tooltip-container:hover .tooltip {
-		opacity: 1;
-		visibility: visible;
-		transform: translateY(-50%) translateX(0);
-	}
-
-	.slot.tooltip-container .tooltip::before {
-		content: "";
-		position: absolute;
-		left: -4px;
-		top: 50%;
-		transform: translateY(-50%) rotate(45deg);
-		width: 8px;
-		height: 8px;
-		background-color: rgba(0, 0, 0, 0.8);
 	}
 </style>

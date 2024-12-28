@@ -12,6 +12,7 @@
   import { setGlobal } from "../biz/globalStore";
     import { modalStore } from "../components/modalStore";
     import { errorHandler } from "../biz/errorHandler";
+    import About from "../components/About.svelte";
   // 使用calendar实例的store
   const currentMonth = calendar.currentMonth;
 
@@ -120,9 +121,9 @@
     setGlobal("project_engineers", config.project_engineers || []);
     setGlobal("testing_engineers", config.testing_engineers || []);
     setGlobal("loadSetting", config.loadSetting || {});
-    // await store.set("tests", config.tests || []);
-    // await store.set("project_engineers", config.project_engineers || []);
-    // await store.set("testing_engineers", config.testing_engineers || []);
+    await store.set("tests", config.tests || []);
+    await store.set("project_engineers", config.project_engineers || []);
+    await store.set("testing_engineers", config.testing_engineers || []);
     await store.set("loadSetting", config.loadSetting || {});
   };
   // Add keyboard event listener for month navigation
@@ -220,24 +221,13 @@
       </div>
       <button
         class="tooltip-container"
-        onclick={() => goto("/settings")}
-        aria-label="settings"
+        onclick={() => modalStore.open(About, { onNegative: () => modalStore.close() })}
+        aria-label="about"
       >
-        <span class="tooltip">设置</span>
-        <svg
-          class="logo"
-          style="fill: #fbc400;"
-          viewBox="0 0 1024 1024"
-          version="1.1"
-          xmlns="http://www.w3.org/2000/svg"
-          width="200"
-          height="200"
-          ><path
-            d="M899.2 379.2a439.68 439.68 0 0 0-19.52-47.04 137.28 137.28 0 0 0-187.84-187.84 439.68 439.68 0 0 0-47.04-19.52 137.28 137.28 0 0 0-265.6 0 439.68 439.68 0 0 0-47.04 19.52 137.28 137.28 0 0 0-187.84 187.84 439.68 439.68 0 0 0-19.52 47.04 137.28 137.28 0 0 0 0 265.6 439.68 439.68 0 0 0 19.52 47.04 137.28 137.28 0 0 0 187.84 187.84 439.68 439.68 0 0 0 47.04 19.52 137.28 137.28 0 0 0 265.6 0 439.68 439.68 0 0 0 47.04-19.52 137.28 137.28 0 0 0 187.84-187.84 439.68 439.68 0 0 0 19.52-47.04 137.28 137.28 0 0 0 0-265.6z m-33.6 186.88a41.6 41.6 0 0 0-38.72 32 314.24 314.24 0 0 1-32 77.76 41.92 41.92 0 0 0 5.12 48A54.08 54.08 0 0 1 723.84 800a41.92 41.92 0 0 0-49.28-5.76 314.24 314.24 0 0 1-77.76 32 41.6 41.6 0 0 0-32 38.72 54.08 54.08 0 0 1-108.16 0 41.6 41.6 0 0 0-32-38.72 314.24 314.24 0 0 1-77.76-32 43.84 43.84 0 0 0-20.8-5.44 42.24 42.24 0 0 0-28.48 11.2A54.08 54.08 0 0 1 224 723.84a41.92 41.92 0 0 0 5.76-49.28 314.24 314.24 0 0 1-32-77.76 41.6 41.6 0 0 0-38.72-32 54.08 54.08 0 0 1 0-108.16 41.6 41.6 0 0 0 38.72-32 314.24 314.24 0 0 1 32-77.76A41.92 41.92 0 0 0 224 300.16 54.08 54.08 0 0 1 300.16 224a41.92 41.92 0 0 0 49.28 5.76 314.24 314.24 0 0 1 77.76-32 41.6 41.6 0 0 0 32-38.72 54.08 54.08 0 0 1 108.16 0 41.6 41.6 0 0 0 32 38.72 314.24 314.24 0 0 1 77.76 32A41.92 41.92 0 0 0 723.84 224 54.08 54.08 0 0 1 800 300.16a41.92 41.92 0 0 0-5.76 49.28 314.24 314.24 0 0 1 32 77.76 41.6 41.6 0 0 0 38.72 32 54.08 54.08 0 0 1 0 108.16z"
-          ></path><path
-            d="M512 310.4a201.6 201.6 0 1 0 201.6 201.6A201.92 201.92 0 0 0 512 310.4z m0 320a118.4 118.4 0 1 1 118.4-118.4 118.4 118.4 0 0 1-118.4 118.4z"
-          ></path></svg
-        ></button
+        <span class="tooltip">关于</span>
+        <svg class="logo"
+        style="fill: #fbc400;" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" width="200" height="200"><path d="M512 32C247.04 32 32 247.04 32 512s215.04 480 480 480 480-215.04 480-480S776.96 32 512 32z m58.56 725.76c0 25.92-21.12 47.04-47.04 47.04h-23.52c-25.92 0-47.04-21.12-47.04-47.04V476.96c0-25.92 21.12-47.04 47.04-47.04h23.52c25.92 0 47.04 21.12 47.04 47.04v280.8zM512 359.84c-32.16 0-58.56-26.4-58.56-58.56 0-32.16 26.4-58.56 58.56-58.56s58.56 26.4 58.56 58.56c0 32.16-26.4 58.56-58.56 58.56z"></path></svg>
+        </button
       >
     </div>
 
@@ -272,7 +262,7 @@
               <!-- svelte-ignore a11y_click_events_have_key_events -->
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div
-                class="day {calendar.isToday(date) ? 'today' : ''}"
+                class="tooltip-container day {calendar.isToday(date) ? 'today' : ''}"
                 title={`Go to ${date}`}
                 style="background-color: {calendar.getDayColor(
                   date,
@@ -280,6 +270,7 @@
                 )}"
                 onclick={() => handleDateClick(date)}
               >
+              <div class="tooltip">{`${calendar.getDayReservationCount(date, monthlyReservations)}个预约`}</div>
                 {day}
               </div>
             {/each}

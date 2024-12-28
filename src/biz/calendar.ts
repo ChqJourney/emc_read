@@ -1,5 +1,6 @@
 import { get, writable, type Writable } from 'svelte/store';
-import type { Reservation } from '../types/reservation';
+import type { Reservation } from '../biz/types';
+import { getGlobal } from './globalStore';
 
 export class Calendar {
     private static instance: Calendar;
@@ -50,15 +51,26 @@ export class Calendar {
         return Array.from({ length: daysInMonth }, (_, i) => i + 1);
     }
 
+    // 获取某天的预约数量
+    private getDayReservations(date: string, reservations: Reservation[]): Reservation[] {
+        return reservations?.filter(r => r.reservation_date === date) ?? [];
+    }
+
     // 获取某天的预约状态颜色
     public getDayColor(date: string, reservations: Reservation[]): string {
-        const dayReservations = reservations?.filter(r => r.reservation_date === date);
-        const count = dayReservations?.length??0;
+        const count = this.getDayReservations(date, reservations).length;
+        const loadingSetting:{low_load:number,medium_load:number,high_load:number} = getGlobal("loadSetting")
         
         if (count === 0) return 'transparent';
-        if (count <= 3) return `rgba(75, 192, 92, ${count / 11})`; // 绿色渐变
-        if (count <= 5) return `rgba(255, 205, 86, ${(count - 11) / 11})`; // 黄色渐变
-        return 'rgba(255, 99, 132, 1)'; // 红色
+        if (count <= loadingSetting.low_load) return `rgba(75, 192, 92, 0.${count * 2})`; // 绿色渐变
+        if (count <= loadingSetting.medium_load) return `rgba(255, 205, 86, 0.${count * 2})`; // 黄色渐变
+        if (count <= loadingSetting.high_load) return `rgba(255, 153, 0, 0.${count * 2})`; // 橙色渐变
+        return 'rgba(255, 99, 132, 0.8)'; // 红色
+    }
+
+    // 获取每天的预约数量
+    public getDayReservationCount(date: string, reservations: Reservation[]): number {
+        return this.getDayReservations(date, reservations).length;
     }
 
     // 格式化日期
@@ -91,7 +103,6 @@ export class Calendar {
         const currentDate = new Date(get(this.selectedDate));
         currentDate.setDate(currentDate.getDate() + delta);
         const newDate = currentDate.toISOString().split('T')[0];
-        console.log(newDate);
         this.setDate(newDate);
     }
     // 前一天

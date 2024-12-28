@@ -1,5 +1,6 @@
 use chrono::Local;
 use serde_json::json;
+use tauri::{Manager,Listener};
 use std::{
     env,
     fs::File,
@@ -70,7 +71,18 @@ pub fn run() {
             set_config,
             get_config
         ])
-        
+        .setup(|app| {
+            let main_window = app.get_webview_window("main").unwrap();
+            let loading_window = app.get_webview_window("loading").unwrap();
+            
+            app.listen_any("completed", move |event| {
+                println!("Webview created: {:?}", event.payload());
+                // 当主窗口创建完成后，显示主窗口并关闭加载窗口
+                main_window.show().unwrap();
+                loading_window.close().unwrap();
+            });
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

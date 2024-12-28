@@ -2,12 +2,23 @@
   import { fade } from 'svelte/transition';
   import { modalStore } from './modalStore';
   let {show, onClose}=$props();
+
+  function handleOverlayClick(event: MouseEvent) {
+    // 确保点击的是遮罩层而不是模态框内容
+    if (event.target === event.currentTarget) {
+      onClose();
+    }
+  }
 </script>
 
 {#if show}
   
-  <div class="modal-overlay" transition:fade on:click={onClose}>
-    <div class="modal" on:click|stopPropagation>
+  <div 
+    class="modal-overlay" 
+    transition:fade 
+    on:click={handleOverlayClick}
+  >
+    <div class="modal">
 
       {@render $modalStore.component?.()}
     </div>
@@ -30,7 +41,7 @@
 
   .modal {
     background: white;
-    padding: 2rem;
+    padding: 0rem 2rem;
     border-radius: 8px;
     width: 90%;
     max-width: 500px;
