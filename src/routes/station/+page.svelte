@@ -16,6 +16,7 @@
     import ReservationInfo from "../../components/ReservationInfo.svelte";
     import { errorHandler } from "../../biz/errorHandler";
     import { exists } from "@tauri-apps/plugin-fs";
+    import About from "../../components/About.svelte";
 
 	let { data }: { data: PageData } = $props();
 	let { stationId }= data;
@@ -60,9 +61,9 @@
 		const stationInfos: Station[] = await repository.getStationById(
 			parseInt(stationId),
 		);
-		console.log(stationInfos);
+		// console.log(stationInfos);
 		photoAvailable = await exists(getPhotoPath(stationInfos[0].photo_path));
-		console.log(photoAvailable);
+		// console.log(photoAvailable);
 		return stationInfos[0];
 	}
 
@@ -74,6 +75,7 @@
 			return path;
 		} else {
 			const remote_source = getGlobal("remote_source");
+			// console.log(`${remote_source}\\station_pics\\${path}`);
 			return `${remote_source}\\station_pics\\${path}`;
 		}
 	};
@@ -113,7 +115,26 @@
 	<!-- 固定的顶部信息 -->
 	<header class="station-info">
 		<div class="header-content">
-			<img src="/intertek.png" class="brand" alt="logo" />
+			<button
+				aria-label="home"
+				class="tooltip-container"
+				onclick={() => goto(`/date?${$selectedDate}`)}
+			>
+				<span class="tooltip-bottom">返回工位列表</span>
+				<svg
+					class="home_svg"
+					
+					viewBox="0 0 1280 1024"
+					version="1.1"
+					xmlns="http://www.w3.org/2000/svg"
+					width="200"
+					height="200"
+					><path
+						d="M1271.872 986.624c10.944-9.344 17.6-15.04-26.368-198.656-76.288-317.888-378.816-523.008-717.504-553.6V0L0 410.048l528 410.048V585.792c219.52-16.64 412.352 2.496 541.44 141.184 63.808 68.48 140.608 204.16 159.04 244.096 2.56 5.632 7.424 16.064 19.008 20.032l14.016 4.48 10.368-8.96z"
+					></path></svg
+				>
+			</button>
+			<!-- <img src="/intertek.png" class="brand" alt="logo" /> -->
 			{#await loadStationInfo(stationId||"1")}
 				<div class="loading-spinner">加载中...</div>
 			{:then stationInfo}
@@ -152,24 +173,15 @@
 				{/if}
 			{/await}
 			<button
-				aria-label="home"
-				class="tooltip-container"
-				onclick={() => goto(`/date?${$selectedDate}`)}
-			>
-				<span class="tooltip-bottom">返回工位列表</span>
-				<svg
-					class="home_svg"
-					
-					viewBox="0 0 1280 1024"
-					version="1.1"
-					xmlns="http://www.w3.org/2000/svg"
-					width="200"
-					height="200"
-					><path
-						d="M1271.872 986.624c10.944-9.344 17.6-15.04-26.368-198.656-76.288-317.888-378.816-523.008-717.504-553.6V0L0 410.048l528 410.048V585.792c219.52-16.64 412.352 2.496 541.44 141.184 63.808 68.48 140.608 204.16 159.04 244.096 2.56 5.632 7.424 16.064 19.008 20.032l14.016 4.48 10.368-8.96z"
-					></path></svg
-				>
-			</button>
+      class="tooltip-container"
+      onclick={() => modalStore.open(About, { onNegative: () => modalStore.close() })}
+      aria-label="about"
+    >
+      <span class="tooltip-right">关于</span>
+      <svg class="home_svg"
+      style="fill: #fbc400;" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" width="200" height="200"><path d="M512 32C247.04 32 32 247.04 32 512s215.04 480 480 480 480-215.04 480-480S776.96 32 512 32z m58.56 725.76c0 25.92-21.12 47.04-47.04 47.04h-23.52c-25.92 0-47.04-21.12-47.04-47.04V476.96c0-25.92 21.12-47.04 47.04-47.04h23.52c25.92 0 47.04 21.12 47.04 47.04v280.8zM512 359.84c-32.16 0-58.56-26.4-58.56-58.56 0-32.16 26.4-58.56 58.56-58.56s58.56 26.4 58.56 58.56c0 32.16-26.4 58.56-58.56 58.56z"></path></svg>
+    
+    </button>
 		</div>
 	</header>
 
@@ -325,8 +337,8 @@
 	}
 	.home_svg {
 		fill: #fbc400;
-		width: 2.5rem;
-		height: 2.5rem;
+		width: 2rem;
+		height: 2rem;
 	}
 	.station-description{
 		font-size: 0.8rem;
@@ -377,7 +389,7 @@
 		border-radius: 0.6rem;
 	}
 	.station-info .header-content {
-		max-width: 1200px;
+		/* max-width: 1200px; */
 		margin: 0 auto;
 		display: flex;
 		justify-content: space-between;
@@ -395,11 +407,15 @@
 		justify-content: space-between;
 		align-items: center;
 		width: 100%;
+		max-width: 1200px;
 		margin: 0 1rem;
+		background:rgb(249, 249, 249);
+		border-radius: 12px;
+		padding: 0 1rem;
 	}
 	.station-image {
-		width: 100px;
-		height: 100px;
+		width: 120px;
+		height: 120px;
 		border-radius: 12px;
 		margin-right: 4rem;
 		fill: #fbc400;
@@ -491,6 +507,39 @@
 		z-index: 50;
 	}
 	.tooltip-container:hover .tooltip-bottom {
+		opacity: 1;
+		visibility: visible;
+		transform: translateX(50%) translateY(0%);
+	}
+	.tooltip-right {
+		position: absolute;
+		right: 50%;
+		top: 100%;
+		transform: translateX(50%);
+		background-color: rgba(0, 0, 0, 0.8);
+		color: white;
+		padding: 6px 12px;
+		border-radius: 4px;
+		font-size: 0.85rem;
+		white-space: nowrap;
+		opacity: 0;
+		visibility: hidden;
+		transition: all 0.3s ease;
+		z-index: 50;
+		margin-bottom: 10px;
+	}
+	.tooltip-right::before {
+		content: "";
+		position: absolute;
+		top: -4px;
+		left: 50%;
+		transform: translateX(-50%) rotate(45deg);
+		width: 8px;
+		height: 8px;
+		background-color: rgba(0, 0, 0, 0.8);
+		z-index: 50;
+	}
+	.tooltip-container:hover .tooltip-right {
 		opacity: 1;
 		visibility: visible;
 		transform: translateX(50%) translateY(0%);
