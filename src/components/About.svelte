@@ -7,7 +7,7 @@
   <h3>关于 EMC 预约系统</h3>
   
   <div class="content">
-    <p class="version">版本：v20241228</p>
+    <p class="version">版本：v20241230</p>
     
     <div class="section">
       <h4>系统说明</h4>

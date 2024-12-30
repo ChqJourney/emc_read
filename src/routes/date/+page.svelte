@@ -237,6 +237,7 @@
                         {#if reservation}
                           <button
                             class="tooltip-container"
+                            style="gap: 5px; display: flex; flex-direction: column; align-items: center; width: 100%;"
                             onclick={() =>
                               modalStore.open(ReservationInfo, {
                                 onNegative: () => modalStore.close(),
@@ -246,20 +247,30 @@
                             <span class={idx === 4 ? "tooltip-top" : "tooltip"}
                               >点击查看预约</span
                             >
-                            <div style="font-size: smaller; text-align: left;">
-                              <span style="font-weight:bold;">客户：</span
-                              >{reservation.client_name}
-                            </div>
-                            <div style="font-size: smaller; text-align: left;">
-                              <span style="font-weight:bold;">产品：</span
-                              >{reservation.product_name}
+                            <div style="font-size: smaller;font-weight:bold; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">
+                              <!-- <span style="font-weight:bold;">PE:</span
+                              > -->
+                              {reservation.project_engineer}
                             </div>
                             {#if reservation.job_no}
-                              <div
-                                style="font-size: smaller; text-align: left;"
-                              >
-                                <span style="font-weight:bold;">Job no.:</span
-                                >{reservation.job_no}
+                            <div style="font-size: smaller; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">
+                              <!-- <span style="font-weight:bold;">Job No.:</span
+                              > -->
+                              {reservation.job_no}
+                            </div>
+                            {/if}
+                            {#if reservation.product_name}
+                              <div style="font-size: smaller; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">
+                                <!-- <span style="font-weight:bold;">Product:</span
+                                > -->
+                                {reservation.product_name}
+                              </div>
+                            {/if}
+                            {#if reservation.client_name}
+                              <div style="font-size: smaller; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">
+                                <!-- <span style="font-weight:bold;">Client:</span
+                                > -->
+                                {reservation.client_name}
                               </div>
                             {/if}
                           </button>
