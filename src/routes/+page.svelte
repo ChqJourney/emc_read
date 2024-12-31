@@ -13,19 +13,26 @@
     import { modalStore } from "../components/modalStore";
     import { errorHandler } from "../biz/errorHandler";
     import About from "../components/About.svelte";
+    import type { AppError } from "../biz/errors";
   // 使用calendar实例的store
   const currentMonth = calendar.currentMonth;
 
   // 加载月度预约数据
   async function loadMonthData(): Promise<Reservation[]> {
-    const year = parseInt($currentMonth.split("-")[0]);
-    const month = parseInt($currentMonth.split("-")[1]);
-    const daysInMonth = new Date(year, month, 0).getDate();
+    try{
 
-    // 获取整月的预约数据
-    // monthlyReservations = [];
-    const res = await repository.getReservationsByMonth($currentMonth);
-    return res;
+      const year = parseInt($currentMonth.split("-")[0]);
+      const month = parseInt($currentMonth.split("-")[1]);
+      const daysInMonth = new Date(year, month, 0).getDate();
+      
+      // 获取整月的预约数据
+      // monthlyReservations = [];
+      const res = await repository.getReservationsByMonth($currentMonth);
+      return res;
+    }catch(e){
+      errorHandler.handleError(e as AppError);
+      return [];
+    }
   }
 
   // 处理日期点击
@@ -41,31 +48,27 @@
   const calendarDays = $derived(calendar.getCalendarDays($currentMonth));
   const monthDisplay = $derived(calendar.getMonthDisplay($currentMonth));
 
-  async function logVisiting(u: User) {
-    console.log(u);
-    const vistings = await repository.getVistingByUserAndMachine(
-      u.user,
-      u.machine,
-    );
-    console.log(vistings);
-    if (vistings.length > 0) {
-      console.log("count+1")
-      vistings[0].visit_count += 1;
-      vistings[0].last_visit_time = new Date().toISOString();
-      await repository.updateVisting(vistings[0]);
-    } else {
-      await repository.createVisting({
-        visit_user: u.user,
-        visit_machine: u.machine,
-        visit_count: 1,
-      });
-    }
-  }
-  const sleep = (ms: number) => {
-    return new Promise((resolve) => {
-      setTimeout(resolve, ms);
-    });
-  };
+  // async function logVisiting(u: User) {
+  //   console.log(u);
+  //   const vistings = await repository.getVistingByUserAndMachine(
+  //     u.user,
+  //     u.machine,
+  //   );
+  //   console.log(vistings);
+  //   if (vistings.length > 0) {
+  //     console.log("count+1")
+  //     vistings[0].visit_count += 1;
+  //     vistings[0].last_visit_time = new Date().toISOString();
+  //     await repository.updateVisting(vistings[0]);
+  //   } else {
+  //     await repository.createVisting({
+  //       visit_user: u.user,
+  //       visit_machine: u.machine,
+  //       visit_count: 1,
+  //     });
+  //   }
+  // }
+ 
   const init = async () => {
     const store = await load("settings.json");
     const lastUser: User | undefined = await store.get<User>("user");
@@ -77,7 +80,7 @@
       user: currentUser.user,
     });
     setGlobal("user", { machine: currentUser.machine, user: currentUser.user });
-    logVisiting(currentUser);
+    // logVisiting(currentUser);
     
     const remote_source: string | undefined =
       await store.get<string>("remote_source");
@@ -91,11 +94,13 @@
         source_valid = true;
       } else {
         source_valid = false;
+        errorHandler.showWarning(
+          "远程数据源不可用,无法使用本软件，请重新设置远程数据源，然后重启软件");
       }
     }
     if (!source_valid) {
       const result = await open({
-        title: "选择远程数据源",
+        title: "远程数据源不可用，请选择远程数据源或退出",
         directory: true,
       });
       if (result) {

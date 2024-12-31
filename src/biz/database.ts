@@ -1,9 +1,8 @@
 import Database from '@tauri-apps/plugin-sql';
 import { writable } from 'svelte/store';
-import type { Reservation, ReservationDTO, Station, StationDTO, Test, TestDTO, Visting, VistingDTO } from '../types/interfaces';
+import type { Reservation, ReservationDTO, Station, StationDTO, Test, TestDTO, Visting, VistingDTO } from '../biz/types';
 import { generateLargeAmountReservationData, generateLargeAmountStationData, generateLargeAmountVistingData } from './seedData';
-import { BaseDirectory, readTextFile } from '@tauri-apps/plugin-fs';
-import { load } from '@tauri-apps/plugin-store';
+import { load, Store } from '@tauri-apps/plugin-store';
 import { AppError, ErrorCode } from '../biz/errors';
 
 // 创建一个可写的 store 来存储数据库连接
@@ -65,16 +64,40 @@ async function seedDataIfNeeded(database: Database) {
 // 创建 Repository 类
 class Repository {
     private static instance: Repository;
-
+    private database: Database | null = null;
+    private lastAccessTime: number = 0;
+    private readonly IDLE_TIMEOUT: number =30000;
+    private cleanupTimer:NodeJS.Timeout | null = null;
     private constructor() {
-        initDatabase();
+        this.setupCleanupTimer();
+        // initDatabase();
         // 添加窗口关闭事件监听器
         window.addEventListener('beforeunload', async () => {
             const database = await this.getDb();
             await database.close();
         });
     }
-
+    private setupCleanupTimer() {
+        // 定期检查空闲连接
+        this.cleanupTimer = setInterval(async () => {
+            if (this.database && Date.now() - this.lastAccessTime > this.IDLE_TIMEOUT) {
+                console.log('已清理空闲连接');
+                await this.cleanup();
+                console.log(this.database)
+            }
+        }, 10000); // 每10秒检查一次
+    }
+    private async cleanup() {
+        if (this.database) {
+            try {
+                await this.database.close();
+            } catch (error) {
+                console.error('Error closing database:', error);
+            } finally {
+                this.database = null;
+            }
+        }
+    }
     public static getInstance(): Repository {
         if (!Repository.instance) {
             Repository.instance = new Repository();
@@ -85,14 +108,26 @@ class Repository {
     // 获取数据库实例
     async getDb(): Promise<Database> {
         try {
-            return new Promise((resolve, reject) => {
-                db.subscribe(value => {
-                    if (value) {
-                        resolve(value);
-                    }
-                });
-            });
+        if (!this.database) {
+            const store = await Store.load("settings.json");
+            const remote_source = await store.get<string>("remote_source");
+            if (!remote_source?.trim()) {
+                throw new Error("未设置远程数据源");
+            }
+            
+            const dbString = `sqlite:${remote_source}\\data\\data.db?mode=ro&immutable=1&cache=private`;
+            this.database = await Database.load(dbString);
+            
+            // 设置WAL模式和其他优化
+            // await this.database.execute('PRAGMA journal_mode=WAL');
+            // await this.database.execute('PRAGMA busy_timeout=5000');
+            // await this.database.execute('PRAGMA synchronous=NORMAL');
+        }
+        
+        this.lastAccessTime = Date.now();
+        return this.database;
         } catch (error) {
+            console.error(error)
             throw new AppError(
                 ErrorCode.DB_CONNECTION_ERROR,
                 '数据库连接失败',
@@ -111,6 +146,7 @@ class Repository {
     }
     async getReservationsByMonth(month: string): Promise<Reservation[]> {
         const database = await this.getDb();
+        console.log(database)
         const startDate = `${month}-01`;
         const [year, monthStr] = month.split('-');
         const lastDay = new Date(Number(year), Number(monthStr), 0).getDate();
@@ -136,127 +172,7 @@ class Repository {
         }
     }
 
-    // 示例：创建预约
-    async createReservation(reservation: ReservationDTO) {
-        const database = await this.getDb();
-        try {
-
-            const rs = await database.select<Reservation[]>('SELECT * FROM reservations WHERE reservation_date=$1 AND time_slot=$2 AND station_id=$3 AND RESERVATION_STATUS="normal"', [reservation.reservation_date, reservation.time_slot, reservation.station_id]);
-            if (rs.length > 0) {
-                throw new AppError(
-                    ErrorCode.RESERVATION_CONFLICT,
-                    '预约冲突',
-                    "该时间该工位在该时间段已被预约!"
-                );
-            }
-            return await database.execute(
-                `INSERT INTO reservations(
-                    reservation_date,
-                    time_slot,
-                    station_id,
-                    client_name,
-                    product_name,
-                    tests,
-                    job_no,
-                    project_engineer,
-                    testing_engineer,
-                    purpose_description,
-                    contact_name,
-                    contact_phone,
-                    sales,
-                    reservate_by,
-                    reservation_status
-                    ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
-                [
-                    reservation.reservation_date,
-                    reservation.time_slot,
-                    reservation.station_id,
-                    reservation.client_name,
-                    reservation.product_name,
-                    reservation.tests,
-                    reservation.job_no,
-                    reservation.project_engineer,
-                    reservation.testing_engineer,
-                    reservation.purpose_description,
-                    reservation.contact_name,
-                    reservation.contact_phone,
-                    reservation.sales,
-                    reservation.reservate_by,
-                    reservation.reservation_status
-                ]
-            );
-        } catch (e: unknown) {
-            if (e instanceof Error) {
-                throw new AppError(
-                    ErrorCode.DB_TRANSACTION_ERROR,
-                    '创建预约失败',
-                    e.message
-                );
-            }
-            throw new AppError(
-                ErrorCode.DB_TRANSACTION_ERROR,
-                '创建预约失败',
-                String(e)
-            );
-        }
-    }
-    //更新预约
-    async updateReservation(reservation: Reservation) {
-        const database = await this.getDb();
-        try {
-
-            const existingReservation = await database.select<Reservation[]>('SELECT * FROM reservations WHERE id=$1', [reservation.id]);
-            if (existingReservation.length === 0) {
-                throw new AppError(ErrorCode.DB_TRANSACTION_ERROR, "预约2更新失败", `Reservation with ID ${reservation.id} not found.`);
-            }
-            return await database.execute(
-                `UPDATE reservations SET 
-                reservation_date=$1,
-                time_slot=$2,
-                station_id=$3, 
-                client_name=$4,
-                product_name=$5,
-                contact_name=$6,
-                contact_phone=$7,
-                tests=$8,
-                job_no=$9,
-                purpose_description=$10,
-                sales=$11,
-                project_engineer=$12,
-                testing_engineer=$13,
-                reservate_by=$14,
-                reservation_status=$15 WHERE id=$16`, [
-                reservation.reservation_date,
-                reservation.time_slot,
-                reservation.station_id,
-                reservation.client_name,
-                reservation.product_name,
-                reservation.contact_name,
-                reservation.contact_phone,
-                reservation.tests,
-                reservation.job_no,
-                reservation.purpose_description,
-                reservation.sales,
-                reservation.project_engineer,
-                reservation.testing_engineer,
-                reservation.reservate_by,
-                reservation.reservation_status,
-                reservation.id
-            ]);
-
-        } catch (error) {
-            throw new AppError(ErrorCode.DB_TRANSACTION_ERROR, "预约1更新失败", `Reservation with ID ${reservation.id} not found.`);
-        }
-    }
-    async deleteReservation(id: number) {
-        const database = await this.getDb();
-        try {
-
-            return await database.execute(`DELETE FROM reservations WHERE id=$1`, [id]);
-        } catch (error) {
-            throw new AppError(ErrorCode.DB_TRANSACTION_ERROR, "预约删除失败", `Reservation with ID ${id} not found.`);
-        }
-    }
+   
     //查询某日期某工位某时间段的预约,去除status!=normal
     async getReservationsByStationAndTime(date: string, station_id: number, time_slot: string): Promise<Reservation[]> {
         const database = await this.getDb();
@@ -279,43 +195,17 @@ class Repository {
             console.log(sts);
             return Promise.resolve(sts); // 返回 ststs;
         } catch (error) {
-            throw new AppError(ErrorCode.DB_QUERY_ERROR, "查询工位列表失败", `查询工位列表失败`);
+            throw new AppError(ErrorCode.DB_QUERY_ERROR, "查询工位列表失败", String(error));
         }
     }
-    async createStation(station: StationDTO) {
-        const database = await this.getDb();
-        try {
-            const ss = await database.select<Station[]>('SELECT * FROM stations WHERE name=$1', [station.name]);
-           console.log("ss");
-            if (ss.length > 0) {
-                throw new Error("工位名称已存在");
-            }
-            return await database.execute(
-                `INSERT INTO stations(name,short_name,description,photo_path,status) VALUES($1, $2, $3, $4, $5)`,
-                [station.name, station.short_name, station.description, station.photo_path, station.status]
-            );
-        } catch (error) {
-            throw new AppError(ErrorCode.DB_TRANSACTION_ERROR, "创建工位失败", `创建工位失败: ${String(error)}`);
-        }
-    }
-    async updateStation(station: Station) {
-        const database = await this.getDb();
-        try {
-            return await database.execute(
-                `UPDATE stations SET name=$1,short_name=$2,description=$3,photo_path=$4,status=$5 WHERE id=$6`,
-                [station.name, station.short_name, station.description, station.photo_path, station.status, station.id]
-            );
-        } catch (error) {
-            throw new AppError(ErrorCode.DB_TRANSACTION_ERROR, "更新工位失败", `更新工位失败: ${String(error)}`);
-        }
-    }
+    
     async getStationShortNameById(id: number): Promise<string> {
         const database = await this.getDb();
         try {
             const result: { short_name: string }[] = await database.select('SELECT short_name FROM stations WHERE id=$1', [id]);
             return result[0]?.short_name || '';
         } catch (error) {
-            throw new AppError(ErrorCode.DB_QUERY_ERROR, "查询工位名称失败", `查询工位名称失败: ${String(error)}`);
+            throw new AppError(ErrorCode.DB_QUERY_ERROR, "查询工位名称失败", String(error));
         }
     }
     async getStationById(id: number): Promise<Station[]> {
@@ -323,17 +213,10 @@ class Repository {
         try {
             return await database.select('SELECT * FROM stations WHERE id=$1', [id]);
         } catch (error) {
-            throw new AppError(ErrorCode.DB_QUERY_ERROR, "查询工位失败", `查询工位失败: ${String(error)}`);
+            throw new AppError(ErrorCode.DB_QUERY_ERROR, "查询工位失败", String(error));
         }
     }
-    async deleteStation(id: number) {
-        const database = await this.getDb();
-        try {
-            return await database.execute(`DELETE FROM stations WHERE id=$1`, [id]);
-        } catch (error) {
-            throw new AppError(ErrorCode.DB_TRANSACTION_ERROR, "删除工位失败", `删除工位失败: ${String(error)}`);
-        }
-    }
+  
 
     // sqls for visitings
     async getAllVistings(timeRange: string): Promise<Visting[]> {
@@ -351,7 +234,7 @@ class Repository {
                     return [];
             }
         } catch (error) {
-            throw new AppError(ErrorCode.DB_QUERY_ERROR, "查询访客列表失败", `查询访客列表失败: ${String(error)}`);
+            throw new AppError(ErrorCode.DB_QUERY_ERROR, "查询访客列表失败", String(error));
         }
     }
     async getVistingsByMonth(month: string): Promise<Visting[]> {
@@ -359,7 +242,7 @@ class Repository {
         try{
             return await database.select(`SELECT * FROM visitings WHERE last_visit_time>='${month}-01' AND last_visit_time<='${month}-31'`);
         }catch (error) {
-            throw new AppError(ErrorCode.DB_QUERY_ERROR, "查询访客列表失败", `查询访客列表失败: ${String(error)}`);
+            throw new AppError(ErrorCode.DB_QUERY_ERROR, "查询访客列表失败", String(error));
         }
     }
     async getVistingsByYear(year: string): Promise<Visting[]> {
@@ -367,7 +250,7 @@ class Repository {
         try{
             return await database.select(`SELECT * FROM visitings WHERE last_visit_time>='${year}-01-01' AND last_visit_time<='${year}-12-31'`);
         }catch (error) {
-            throw new AppError(ErrorCode.DB_QUERY_ERROR, "查询访客列表失败", `查询访客列表失败: ${String(error)}`);
+            throw new AppError(ErrorCode.DB_QUERY_ERROR, "查询访客列表失败", String(error));
         }
     }
     async createVisting(visting: VistingDTO) {
@@ -376,7 +259,7 @@ class Repository {
 
             return await database.execute(`INSERT INTO visitings(visit_user,visit_machine,visit_count) VALUES($1,$2,$3)`, [visting.visit_user, visting.visit_machine, visting.visit_count]);
         }catch (error) {
-            throw new AppError(ErrorCode.DB_TRANSACTION_ERROR, "创建访客记录失败", `创建访客记录失败: ${String(error)}`);
+            throw new AppError(ErrorCode.DB_TRANSACTION_ERROR, "创建访客记录失败", String(error));
         }
     }
     async getVistingByUserAndMachine(user: string, machine: string): Promise<Visting[]> {
@@ -384,7 +267,7 @@ class Repository {
         try{
             return await database.select('SELECT * FROM visitings WHERE visit_user=$1 AND visit_machine=$2', [user, machine]);
         }catch (error) {
-            throw new AppError(ErrorCode.DB_QUERY_ERROR, "查询访客记录失败", `查询访客记录失败: ${String(error)}`);
+            throw new AppError(ErrorCode.DB_QUERY_ERROR, "查询访客记录失败", String(error));
         }
     }
     async updateVisting(visting: Visting) {
@@ -392,7 +275,7 @@ class Repository {
         try{
             return await database.execute(`UPDATE visitings SET visit_count=$1 WHERE id=$2`, [visting.visit_count, visting.id]);
         }catch (error) {
-            throw new AppError(ErrorCode.DB_TRANSACTION_ERROR, "更新访客记录失败", `更新访客记录失败: ${String(error)}`);
+            throw new AppError(ErrorCode.DB_TRANSACTION_ERROR, "更新访客记录失败", String(error));
         }
     }
     async deleteVisiting(id: number) {
@@ -400,7 +283,7 @@ class Repository {
         try{
             return await database.execute(`DELETE FROM visitings WHERE id=$1`, [id]);
         }catch (error) {
-            throw new AppError(ErrorCode.DB_TRANSACTION_ERROR, "删除访客记录失败", `删除访客记录失败: ${String(error)}`);
+            throw new AppError(ErrorCode.DB_TRANSACTION_ERROR, "删除访客记录失败", String(error));
         }
     }
 
@@ -409,7 +292,7 @@ class Repository {
     async closeDatabase() {
         const database = await this.getDb();
         await database.close();
-        db.set(null);
+        // db.set(null);
     }
 }
 

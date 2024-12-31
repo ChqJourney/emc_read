@@ -31,7 +31,7 @@ export class ErrorHandler {
 
         if (error instanceof AppError) {
             // 处理自定义错误
-            this.showError(error.message || ErrorMessages[error.code]);
+            this.showError(`${error.message}${error.details ? ":" : ""} ${error.details ?? ""}` || ErrorMessages[error.code]);
             
             // 根据错误代码执行特定操作
             switch (error.code) {
@@ -64,7 +64,7 @@ export class ErrorHandler {
                 message: '',
                 type: 'error'
             });
-        }, 3000);
+        }, 5000);
     }
 
     // 显示警告信息

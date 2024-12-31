@@ -1,24 +1,19 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { get, writable } from "svelte/store";
   import { repository } from "../../biz/database";
   import type {
     Reservation,
-    ReservationDTO,
     Station,
-    User,
   } from "../../biz/types";
-  import { goto, onNavigate } from "$app/navigation";
+  import { goto } from "$app/navigation";
   import type { PageData } from "../$types";
   import { calendar } from "../../biz/calendar";
   import { modalStore } from "../../components/modalStore";
   import ReservationInfo from "../../components/ReservationInfo.svelte";
-  import { load } from "@tauri-apps/plugin-store";
-  import { confirm } from "@tauri-apps/plugin-dialog";
     import { getGlobal } from "../../biz/globalStore";
     import { errorHandler } from "../../biz/errorHandler";
-    import About from "../../components/About.svelte";
+    import Source from "../../components/Source.svelte";
+    import type { AppError } from "../../biz/errors";
   let { data }: { data: PageData } = $props();
   
   const initDate = data.date ?? new Date().toISOString().split("T")[0];
@@ -27,25 +22,37 @@
   async function loadStations() {
     let stations: Station[] = [];
     // stations=[]
-    const stationEntities = await repository.getAllStations();
-    console.log(stationEntities)
-    const orders:{id:number,seq:number}[]=getGlobal("station_orders");
-    if (orders&&orders.length>0&&stationEntities.length>0) {
-      const sortedStations = stationEntities.map((station:Station) => {
-        const seq=orders.find(o=>o.id===station.id)
-        return {...station,sequence_no:seq?.seq??1}
-      });
-      stations=[...sortedStations].sort((a,b)=>a.sequence_no-b.sequence_no)
-    }else{
-      stations=[...stationEntities]
+    try{
+
+      const stationEntities = await repository.getAllStations();
+      console.log(stationEntities)
+      const orders:{id:number,seq:number}[]=getGlobal("station_orders");
+      if (orders&&orders.length>0&&stationEntities.length>0) {
+        const sortedStations = stationEntities.map((station:Station) => {
+          const seq=orders.find(o=>o.id===station.id)
+          return {...station,sequence_no:seq?.seq??1}
+        });
+        stations=[...sortedStations].sort((a,b)=>a.sequence_no-b.sequence_no)
+      }else{
+        stations=[...stationEntities]
+      }
+      
+      return stations
+    }catch(e){
+      errorHandler.handleError(e as AppError);
+      return [];
     }
-    
-    return stations
   }
   async function loadReservations(date: string) {
     let reservations: Reservation[] = [];
-    reservations = await repository.getReservationsByDate(date);
-    return reservations;
+    try{
+
+      reservations = await repository.getReservationsByDate(date);
+      return reservations;
+    }catch(e){
+      errorHandler.handleError(e as AppError);
+      return [];
+    }
   }
 
   const init=async(date:string,loadingIndicator:number)=>{
@@ -169,13 +176,11 @@
     </div>
     <button
       class="tooltip-container"
-      onclick={() => modalStore.open(About, { onNegative: () => modalStore.close() })}
+      onclick={() => modalStore.open(Source, { onNegative: () => modalStore.close() })}
       aria-label="about"
     >
-      <span class="tooltip">关于</span>
-      <svg class="logo"
-      style="fill: #fbc400;" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" width="200" height="200"><path d="M512 32C247.04 32 32 247.04 32 512s215.04 480 480 480 480-215.04 480-480S776.96 32 512 32z m58.56 725.76c0 25.92-21.12 47.04-47.04 47.04h-23.52c-25.92 0-47.04-21.12-47.04-47.04V476.96c0-25.92 21.12-47.04 47.04-47.04h23.52c25.92 0 47.04 21.12 47.04 47.04v280.8zM512 359.84c-32.16 0-58.56-26.4-58.56-58.56 0-32.16 26.4-58.56 58.56-58.56s58.56 26.4 58.56 58.56c0 32.16-26.4 58.56-58.56 58.56z"></path></svg>
-    
+      <span class="tooltip">数据源设置</span>
+      <svg class="logo" style="width: 30px;height: 30px" fill="#fbc400" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" width="200" height="200"><path d="M369.777778 455.111111h284.444444c17.066667 0 28.444444 11.377778 28.444445 28.444445s-11.377778 28.444444-28.444445 28.444444h-284.444444c-17.066667 0-28.444444-11.377778-28.444445-28.444444s11.377778-28.444444 28.444445-28.444445z"></path><path d="M56.888889 483.555556C56.888889 625.777778 170.666667 739.555556 312.888889 739.555556H398.222222v-56.888889H312.888889C204.8 682.666667 113.777778 591.644444 113.777778 483.555556S204.8 284.444444 312.888889 284.444444H398.222222V227.555556H312.888889C170.666667 227.555556 56.888889 341.333333 56.888889 483.555556zM711.111111 227.555556H625.777778v56.888888h85.333333C819.2 284.444444 910.222222 375.466667 910.222222 483.555556S819.2 682.666667 711.111111 682.666667H625.777778v56.888889h85.333333C853.333333 739.555556 967.111111 625.777778 967.111111 483.555556S853.333333 227.555556 711.111111 227.555556z"></path></svg>
     </button>
   </div>
 

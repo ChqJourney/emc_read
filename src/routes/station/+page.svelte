@@ -9,7 +9,6 @@
 	import { onMount } from "svelte";
 	import { repository } from "../../biz/database";
     import { modalStore } from "../../components/modalStore";
-    import { load } from "@tauri-apps/plugin-store";
     import { convertFileSrc } from "@tauri-apps/api/core";
 	import type { PageData } from './$types';
     import { getGlobal } from "../../biz/globalStore";
@@ -17,6 +16,7 @@
     import { errorHandler } from "../../biz/errorHandler";
     import { exists } from "@tauri-apps/plugin-fs";
     import About from "../../components/About.svelte";
+    import type { AppError } from "../../biz/errors";
 
 	let { data }: { data: PageData } = $props();
 	let { stationId }= data;
@@ -27,9 +27,15 @@
 	// 加载月度预约数据
 	async function loadMonthData(): Promise<Reservation[]> {
 		// 获取整月的预约数据
-		const res = await repository.getReservationsByStationAndMonth($currentMonth,parseInt(stationId as string));
-		console.log(res)
-		return res;
+		try{
+
+			const res = await repository.getReservationsByStationAndMonth($currentMonth,parseInt(stationId as string));
+			console.log(res)
+			return res;
+		}catch(e){
+			errorHandler.handleError(e as AppError);
+			return [];
+		}
 	}
 
 	// 计算日历数据
@@ -40,20 +46,6 @@
 	);
 	const calendarDays = $derived(calendar.getCalendarDays($currentMonth));
 	const monthDisplay = $derived(calendar.getMonthDisplay($currentMonth));
-	const showModal = writable(false);
-	async function logVisiting(u:{visit_machine:string,visit_user:string}){
-    console.log(u)
-    const vistings=await repository.getVistingByUserAndMachine(u.visit_user,u.visit_machine);
-    if(vistings.length>0){
-      vistings[0].visit_count+=1;
-      vistings[0].last_visit_time=new Date().toISOString();
-      await repository.updateVisting(vistings[0]);
-    }else{
-      await repository.createVisting({visit_user:u.visit_user,visit_machine:u.visit_machine,visit_count:1});
-    }
-  }
-	
-	
 	
 	let photoAvailable = $state(false);
 	async function loadStationInfo(stationId: string): Promise<Station> {
