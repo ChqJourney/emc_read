@@ -100,7 +100,7 @@
     }
     if (!source_valid) {
       const result = await open({
-        title: "远程数据源不可用，请选择远程数据源或退出",
+        title: "远程数据源未设置或不可用，请选择远程数据源或退出",
         directory: true,
       });
       if (result) {
