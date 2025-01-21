@@ -2,53 +2,42 @@
     import { repository } from '../biz/database';
     import { errorHandler } from '../biz/errorHandler';
     import type { AppError } from '../biz/errors';
-  import type { Reservation } from '../biz/types';
+    import type { Reservation } from '../biz/types';
     import { modalStore } from './modalStore';
   
-let {reservation}:{reservation:Reservation}=$modalStore.props;
+    let {reservation}:{reservation:Reservation}=$modalStore.props;
+
 
   console.log(reservation);
-  let showDetails = $state(false);
-  // 预订状态中文映射
-  const formatStatus = (status: string): string => {
-      switch (status) {
-          case 'normal':
-              return '正常';
-          case 'cancel':
-              return '已取消';
-          case 'lock':
-              return '已过期';
+    let showDetails = $state(false);
+    
+    const formatTimeslot = (timeslot: string): string => {
+      switch (timeslot) {
+          case 'T1':
+              return '9:30-12:00';
+          case 'T2':
+              return '13:00-15:00';
+          case 'T3':
+              return '15:00-17:30';
+          case 'T4':
+              return '18:00-20:30';
+          case 'T5':
+              return '20:30-23:59';
           default:
-              return '未知状态';
+              return '未知时间段';
       }
-  };
-  const formatTimeslot = (timeslot: string): string => {
-    switch (timeslot) {
-        case 'T1':
-            return '9:30-12:00';
-        case 'T2':
-            return '13:00-15:00';
-        case 'T3':
-            return '15:00-17:30';
-        case 'T4':
-            return '18:00-20:30';
-        case 'T5':
-            return '20:30-23:59';
-        default:
-            return '未知时间段';
     }
-  }
-const formatTime = (date: Date) => {
-  return date.toString().substring(0, 16);
-}
-const getStationName=async(id:number)=>{
-    try{
-      const station=await repository.getStationById(id);
-      return station[0].name
-    }catch(e){
-        errorHandler.handleError(e as AppError);
+    const formatTime = (date: Date) => {
+      return date.toString().substring(0, 16);
     }
-}
+    const getStationName=async(id:number)=>{
+        try{
+          const station=await repository.getStationById(id);
+          return station[0].name
+        }catch(e){
+            errorHandler.handleError(e as AppError);
+        }
+    }
 </script>
 
 <div class="reservation-info">
@@ -74,25 +63,7 @@ const getStationName=async(id:number)=>{
         <span class="value">加载失败:{error.message}</span>
       {/await}
     </div>
-    <div class="info-item">
-      <span class="label">客户名称：</span>
-      <span class="value">{reservation.client_name}</span>
-    </div>
-    {#if showDetails}
-    <div class="info-item">
-      <span class="label">产品名称：</span>
-      <span class="value">{reservation.product_name}</span>
-    </div>
-    <div class="info-item">
-      <span class="label">联系人：</span>
-      <span class="value">{reservation.contact_name}</span>
-    </div>
     
-    <div class="info-item">
-      <span class="label">联系电话：</span>
-      <span class="value">{reservation.contact_phone}</span>
-    </div>
-    {/if}
     
     <div class="info-item">
       <span class="label">时间段：</span>
@@ -114,8 +85,28 @@ const getStationName=async(id:number)=>{
       <span class="label">测试内容：</span>
       <span class="value">{reservation.tests}</span>
     </div>
-    
+    <div class="info-item">
+      <span class="label">客户名称：</span>
+      <span class="value">{reservation.client_name}</span>
+    </div>
     {#if showDetails}
+    <div class="info-item">
+      <span class="label">产品名称：</span>
+      <span class="value">{reservation.product_name}</span>
+    </div>
+    <div class="info-item purpose">
+      <span class="label">用途描述：</span>
+      <span class="value">{reservation.purpose_description}</span>
+    </div>
+    <div class="info-item">
+      <span class="label">联系人：</span>
+      <span class="value">{reservation.contact_name}</span>
+    </div>
+    
+    <div class="info-item">
+      <span class="label">联系电话：</span>
+      <span class="value">{reservation.contact_phone}</span>
+    </div>
     <div class="info-item">
       <span class="label">负责销售：</span>
       <span class="value">{reservation.sales}</span>
@@ -132,17 +123,7 @@ const getStationName=async(id:number)=>{
       <span class="label">修改时间：</span>
       <span class="value">{formatTime(reservation.updated_On)}</span>
     </div>
-    <div class="info-item">
-      <span class="label">预订状态：</span>
-      <span class="value status" class:cancelled={reservation.reservation_status === 'cancel'} class:normal={reservation.reservation_status === 'normal'} class:locked={reservation.reservation_status === 'lock'}>
-        {formatStatus(reservation.reservation_status)}
-      </span>
-    </div>
     
-    <div class="info-item purpose">
-      <span class="label">用途描述：</span>
-      <span class="value">{reservation.purpose_description}</span>
-    </div>
     {/if}
   </div>
 </div>

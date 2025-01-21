@@ -92,3 +92,22 @@ export interface Config{
     low_load:number;
     medium_load:number;
 }
+export interface SeventDTO{
+    name:string;
+    from_date:string;
+    to_date:string;
+    station_id:number;
+    created_By:string;
+    update_By:string;
+}
+export interface Sevent{
+    id:number;
+    name:string;
+    from_date:string;
+    to_date:string;
+    station_id:number;
+    updated_On:Date;
+    created_On:Date;
+    created_By:string;
+    update_By:string;
+}

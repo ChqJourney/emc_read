@@ -1,25 +1,28 @@
 <script lang="ts">
-	import { writable } from "svelte/store";
+	import { get, writable } from "svelte/store";
 	import { goto } from "$app/navigation";
 	import { calendar } from "../../biz/calendar";
 	import type {
 		Reservation,
+		ReservationDTO,
 		Station,
 	} from "../../biz/types";
 	import { onMount } from "svelte";
 	import { repository } from "../../biz/database";
-    import { modalStore } from "../../components/modalStore";
-    import { convertFileSrc } from "@tauri-apps/api/core";
-	import type { PageData } from './$types';
-    import { getGlobal } from "../../biz/globalStore";
-    import ReservationInfo from "../../components/ReservationInfo.svelte";
+	import { modalStore } from "../../components/modalStore";
+	import ReservationInfo from "../../components/ReservationInfo.svelte";
+	import { load } from "@tauri-apps/plugin-store";
+	import { convertFileSrc } from "@tauri-apps/api/core";
+	import type { PageData } from "./$types";
+	import { getGlobal } from "../../biz/globalStore";
+	import { init } from "../../biz/operation";
+	import { exists } from "@tauri-apps/plugin-fs";
     import { errorHandler } from "../../biz/errorHandler";
-    import { exists } from "@tauri-apps/plugin-fs";
-    import About from "../../components/About.svelte";
     import type { AppError } from "../../biz/errors";
 
 	let { data }: { data: PageData } = $props();
-	let { stationId }= data;
+	let { stationId,date }:{stationId:string|null,date:string|null} = data;
+	let isDisabled=$state(false);
 	console.log(stationId);
 	// 使用calendar实例的store
 	const currentMonth = calendar.currentMonth;
@@ -29,8 +32,11 @@
 		// 获取整月的预约数据
 		try{
 
-			const res = await repository.getReservationsByStationAndMonth($currentMonth,parseInt(stationId as string));
-			console.log(res)
+			const res = await repository.getReservationsByStationAndMonth(
+				$currentMonth,
+				parseInt(stationId as string),
+			);
+			console.log(res);
 			return res;
 		}catch(e){
 			errorHandler.handleError(e as AppError);
@@ -46,19 +52,30 @@
 	);
 	const calendarDays = $derived(calendar.getCalendarDays($currentMonth));
 	const monthDisplay = $derived(calendar.getMonthDisplay($currentMonth));
-	
+	const showModal = writable(false);
+
 	let photoAvailable = $state(false);
-	async function loadStationInfo(stationId: string): Promise<Station> {
-		console.log(stationId);
+	async function loadStationInfo(stationId: string,loadingIndicator:number,selectedDate:string): Promise<Station> {
+		console.log("start to load StationInfo");
 		const stationInfos: Station[] = await repository.getStationById(
 			parseInt(stationId),
 		);
-		// console.log(stationInfos);
+		console.log(stationInfos);
 		photoAvailable = await exists(getPhotoPath(stationInfos[0].photo_path));
-		// console.log(photoAvailable);
+		console.log(photoAvailable);
+		//获取sevents并filter
+		const sevents=await repository.getSeventsByStationId(parseInt(stationId));
+		console.log(sevents);
+		const filteredSevents=sevents.filter(s=>new Date(s.from_date)<=new Date(selectedDate)&&new Date(s.to_date)>=new Date(selectedDate));
+		console.log(filteredSevents);
+		stationInfos[0].status=filteredSevents.length===0?'in_service':filteredSevents[0].name;
+		isDisabled=stationInfos[0].status!=='in_service';
+		console.log(stationInfos);
 		return stationInfos[0];
 	}
 
+	let loadingIndicator = $state(0);
+	
 	const handlePhotoPath = (path: string) => {
 		return convertFileSrc(getPhotoPath(path));
 	};
@@ -67,7 +84,6 @@
 			return path;
 		} else {
 			const remote_source = getGlobal("remote_source");
-			// console.log(`${remote_source}\\station_pics\\${path}`);
 			return `${remote_source}\\station_pics\\${path}`;
 		}
 	};
@@ -97,25 +113,58 @@
 			calendar.changeMonth(1);
 		}
 	};
+
 	onMount(() => {
 		window.addEventListener("keydown", handleKeydown);
 		return () => window.removeEventListener("keydown", handleKeydown);
 	});
+
+	const init_page=async()=>{
+		const user=getGlobal("user");
+		const tests=getGlobal("tests");
+		const project_engineers=getGlobal("project_engineers");
+		const test_engineers=getGlobal("testing_engineers");
+		if(!user||!tests||!project_engineers||!test_engineers){
+			await init();
+		}
+		await new Promise(resolve => setTimeout(resolve, 200));
+	}
 </script>
 
+{#snippet station_badge(status:string)}
+	{#if status === "in_service"}
+		<span class="station-badge in_service">正常</span>
+	{:else if status === "out_of_service"}
+		<span class="station-badge out_of_service">停用</span>
+	{:else if status === "maintenance"}
+		<span class="station-badge maintenance">维护</span>
+		{:else if status==='calibration'}
+		<span class="station-badge calibration">校准</span>
+		{:else}
+		<span class="station-badge unknown">未知状态</span>
+	{/if}
+{/snippet}
+
 <div class="container">
+	{#await init_page()}
+	<div class="loading-container">
+		<div class="loading-spinner-wrapper">
+		  <div class="loading-spinner"></div>
+		</div>
+		<span class="loading-text">加载中...</span>
+	  </div>
+	{:then _}
 	<!-- 固定的顶部信息 -->
 	<header class="station-info">
 		<div class="header-content">
 			<button
 				aria-label="home"
 				class="tooltip-container"
-				onclick={() => goto(`/date?${$selectedDate}`)}
+				onclick={() => goto(`/date?date=${$selectedDate}`)}
 			>
 				<span class="tooltip-bottom">返回工位列表</span>
 				<svg
 					class="home_svg"
-					
 					viewBox="0 0 1280 1024"
 					version="1.1"
 					xmlns="http://www.w3.org/2000/svg"
@@ -126,15 +175,16 @@
 					></path></svg
 				>
 			</button>
-			<!-- <img src="/intertek.png" class="brand" alt="logo" /> -->
-			{#await loadStationInfo(stationId||"1")}
+			
+			{#await loadStationInfo(stationId || "1",loadingIndicator,$selectedDate)}
 				<div class="loading-spinner">加载中...</div>
 			{:then stationInfo}
 				{#if stationInfo}
-					<div class="station-details">
+					<div class="station-details" class:disableStation={isDisabled}>
 						<div class="station-name-container">
 							<div class="station-name">
 								{stationInfo.name ?? "Unknown"}
+								{@render station_badge(stationInfo.status)}
 							</div>
 							<p class="station-description">
 								{stationInfo.description ?? "Unknown"}
@@ -166,13 +216,24 @@
 			{/await}
 			<button
       class="tooltip-container"
-      onclick={() => modalStore.open(About, { onNegative: () => modalStore.close() })}
-      aria-label="about"
+      onclick={() => goto("/settings")}
+      aria-label="settings"
     >
-      <span class="tooltip-right">关于</span>
-      <svg class="home_svg"
-      style="fill: #fbc400;" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" width="200" height="200"><path d="M512 32C247.04 32 32 247.04 32 512s215.04 480 480 480 480-215.04 480-480S776.96 32 512 32z m58.56 725.76c0 25.92-21.12 47.04-47.04 47.04h-23.52c-25.92 0-47.04-21.12-47.04-47.04V476.96c0-25.92 21.12-47.04 47.04-47.04h23.52c25.92 0 47.04 21.12 47.04 47.04v280.8zM512 359.84c-32.16 0-58.56-26.4-58.56-58.56 0-32.16 26.4-58.56 58.56-58.56s58.56 26.4 58.56 58.56c0 32.16-26.4 58.56-58.56 58.56z"></path></svg>
-    
+      <span class="tooltip-right">设置</span>
+      <svg
+        class="logo"
+        style="fill: #fbc400;"
+        viewBox="0 0 1024 1024"
+        version="1.1"
+        xmlns="http://www.w3.org/2000/svg"
+        width="200"
+        height="200"
+        ><path
+          d="M899.2 379.2a439.68 439.68 0 0 0-19.52-47.04 137.28 137.28 0 0 0-187.84-187.84 439.68 439.68 0 0 0-47.04-19.52 137.28 137.28 0 0 0-265.6 0 439.68 439.68 0 0 0-47.04 19.52 137.28 137.28 0 0 0-187.84 187.84 439.68 439.68 0 0 0-19.52 47.04 137.28 137.28 0 0 0 0 265.6 439.68 439.68 0 0 0 19.52 47.04 137.28 137.28 0 0 0 187.84 187.84 439.68 439.68 0 0 0 47.04 19.52 137.28 137.28 0 0 0 265.6 0 439.68 439.68 0 0 0 47.04-19.52 137.28 137.28 0 0 0 187.84-187.84 439.68 439.68 0 0 0 19.52-47.04 137.28 137.28 0 0 0 0-265.6z m-33.6 186.88a41.6 41.6 0 0 0-38.72 32 314.24 314.24 0 0 1-32 77.76 41.92 41.92 0 0 0 5.12 48A54.08 54.08 0 0 1 723.84 800a41.92 41.92 0 0 0-49.28-5.76 314.24 314.24 0 0 1-77.76 32 41.6 41.6 0 0 0-32 38.72 54.08 54.08 0 0 1-108.16 0 41.6 41.6 0 0 0-32-38.72 314.24 314.24 0 0 1-77.76-32 43.84 43.84 0 0 0-20.8-5.44 42.24 42.24 0 0 0-28.48 11.2A54.08 54.08 0 0 1 224 723.84a41.92 41.92 0 0 0 5.76-49.28 314.24 314.24 0 0 1-32-77.76 41.6 41.6 0 0 0-38.72-32 54.08 54.08 0 0 1 0-108.16 41.6 41.6 0 0 0 38.72-32 314.24 314.24 0 0 1 32-77.76A41.92 41.92 0 0 0 224 300.16 54.08 54.08 0 0 1 300.16 224a41.92 41.92 0 0 0 49.28 5.76 314.24 314.24 0 0 1 77.76-32 41.6 41.6 0 0 0 32-38.72 54.08 54.08 0 0 1 108.16 0 41.6 41.6 0 0 0 32 38.72 314.24 314.24 0 0 1 77.76 32A41.92 41.92 0 0 0 723.84 224 54.08 54.08 0 0 1 800 300.16a41.92 41.92 0 0 0-5.76 49.28 314.24 314.24 0 0 1 32 77.76 41.6 41.6 0 0 0 38.72 32 54.08 54.08 0 0 1 0 108.16z"
+        ></path><path
+          d="M512 310.4a201.6 201.6 0 1 0 201.6 201.6A201.92 201.92 0 0 0 512 310.4z m0 320a118.4 118.4 0 1 1 118.4-118.4 118.4 118.4 0 0 1-118.4 118.4z"
+        ></path></svg
+      >
     </button>
 		</div>
 	</header>
@@ -180,7 +241,12 @@
 	<!-- 日历部分 -->
 	<div class="calendar-container">
 		{#await loadMonthData()}
-			<div>loading...</div>
+		<div class="loading-container">
+			<div class="loading-spinner-wrapper">
+			  <div class="loading-spinner"></div>
+			</div>
+			<span class="loading-text">加载中...</span>
+		  </div>
 		{:then monthlyReservations}
 			<div class="month-nav">
 				<button
@@ -225,7 +291,7 @@
 					>
 				</button>
 			</div>
-			<div class="calendar">
+			<div class="calendar" class:disableStation={isDisabled}>
 				<div class="weekdays">
 					<div style="text-align: center;">日</div>
 					<div style="text-align: center;">一</div>
@@ -247,63 +313,62 @@
 						{@const date = `${$currentMonth}-${day.toString().padStart(2, "0")}`}
 						<!-- svelte-ignore a11y_click_events_have_key_events -->
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
-						<div
+						<div 
 							class="day {calendar.isToday(date) ? 'today' : ''}"
 							class:selectedDay={$selectedDate === date}
-							
+							onclick={e=>{
+								e.preventDefault();
+								e.stopPropagation();
+								calendar.setDate(date);
+							}}
 						>
-						{#await new Promise<Reservation[]>(resolve=>resolve(monthlyReservations.filter(f=>f.reservation_date===date))) then reservations}
-						<div style="display: flex;flex-direction:column;">
-							{#each ["T1", "T2", "T3", "T4", "T5"] as t}
+							{#await new Promise<Reservation[]>( (resolve) => resolve(monthlyReservations.filter((f) => f.reservation_date === date)), ) then reservations}
+								<div
+									style="display: flex;flex-direction:column;"
+								>
+									{#each ["T1", "T2", "T3", "T4", "T5"] as t}
+										{@const reservation =
+											reservations.filter(
+												(f) =>
+													f.time_slot === t,
+											)}
 										<div
 											onclick={async (e) => {
-												
+												if (isDisabled) {
+													return;
+												}
+												e.preventDefault();
+												e.stopPropagation();
 												calendar.setDate(
 													date,
 												);
 												console.log($selectedDate)
-												if (
-													reservations.filter(
-														(f) =>
-															f.time_slot === t,
-													).length > 0
-												) {
+												console.log('Opening modal with reservation:', reservation[0]);
+												if (reservation.length > 0) {
+													console.log(reservation[0]);
 													modalStore.open(
 														ReservationInfo,
 														{
-															
-															onNegative: () =>
-																modalStore.close(),
 															reservation:
-																reservations.filter(
-																	(f) =>
-																		f.time_slot ===
-																		t,
-																)[0],
+																reservation[0],
 														},
 													);
-												} else {
-													errorHandler.showInfo("暂无预约")
+												}else{
+													errorHandler.showInfo('无预约');
 												}
 											}}
 											class="slot tooltip-container"
-											class:fill_slot={reservations.filter(
-												(f) => f.time_slot === t,
-											).length > 0}
+											class:fill_slot={reservation.length > 0}
 										>
-											{#if reservations.filter((f) => f.time_slot === t).length > 0}<span
+											{#if reservation.length > 0}<span
 													class="tooltip"
-													>{reservations.filter(
-														(f) =>
-															f.time_slot === t,
-													)[0]?.client_name}</span
+													>{reservation[0]?.project_engineer}</span
 												>{/if}
 										</div>
 									{/each}
-							</div>
-						{/await}
+								</div>
+							{/await}
 							<div class="day_no" style="z-index: 0;">
-
 								{day}
 							</div>
 						</div>
@@ -316,10 +381,38 @@
 			</div>
 		{/await}
 	</div>
-	
+	{:catch error}
+	<div>{"Error: " + error.message}</div>
+	{/await}
 </div>
 
 <style>
+	.station-badge{
+    padding: 0.25rem 1rem;
+    border-radius: 0.25rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    flex-shrink: 0;
+	}
+	.in_service{
+		background-color: #5cbeb4;
+    color: #191b19;
+	}
+	.out_of_service{
+		background-color: #e2e8f0;
+		color: #a01a27;
+	}
+	.maintenance{
+		background-color: #fbc400;
+		color: #191b19;
+	}
+	.calibration{
+		background-color: #0d3670;
+		color: #faf5ff;
+	}
+	.disableStation{
+		border: 2px solid #ce6868;
+	}
 	.container {
 		display: flex;
 		flex-direction: column;
@@ -329,10 +422,10 @@
 	}
 	.home_svg {
 		fill: #fbc400;
-		width: 2rem;
-		height: 2rem;
+		width: 2.5rem;
+		height: 2.5rem;
 	}
-	.station-description{
+	.station-description {
 		font-size: 0.8rem;
 		color: #94a3b8;
 		font-family: Arial, Helvetica, sans-serif;
@@ -375,11 +468,6 @@
 		width: 25px;
 		fill: #fbc400;
 	}
-	.brand {
-		height: 4rem;
-		width: 4rem;
-		border-radius: 0.6rem;
-	}
 	.station-info .header-content {
 		/* max-width: 1200px; */
 		margin: 0 auto;
@@ -406,8 +494,8 @@
 		padding: 0 1rem;
 	}
 	.station-image {
-		width: 120px;
-		height: 120px;
+		width: 100px;
+		height: 100px;
 		border-radius: 12px;
 		margin-right: 4rem;
 		fill: #fbc400;
@@ -419,7 +507,6 @@
 		margin-right: 4rem;
 		stroke: #837e6a;
 	}
-
 	.calendar-container {
 		padding: 0;
 		flex: 1;
@@ -431,12 +518,12 @@
 	}
 	.tooltip-container {
 		position: relative;
-		z-index: 50;
+		z-index: 5000;
 	}
 
 	.tooltip {
 		position: absolute;
-		right:50%;
+		right: 50%;
 		bottom: 100%;
 		transform: translateX(50%);
 		background-color: rgba(0, 0, 0, 0.8);
@@ -448,7 +535,7 @@
 		opacity: 0;
 		visibility: hidden;
 		transition: all 0.3s ease;
-		z-index: 50;
+		z-index: 5000;
 		margin-bottom: 10px;
 	}
 
@@ -462,7 +549,7 @@
 		width: 8px;
 		height: 8px;
 		background-color: rgba(0, 0, 0, 0.8);
-		z-index: 50;
+		z-index: 5000;
 	}
 
 	.tooltip-container:hover .tooltip {
@@ -484,7 +571,7 @@
 		opacity: 0;
 		visibility: hidden;
 		transition: all 0.3s ease;
-		z-index: 50;
+		z-index: 5000;
 		margin-bottom: 10px;
 	}
 	.tooltip-bottom::before {
@@ -496,7 +583,7 @@
 		width: 8px;
 		height: 8px;
 		background-color: rgba(0, 0, 0, 0.8);
-		z-index: 50;
+		z-index: 5000;
 	}
 	.tooltip-container:hover .tooltip-bottom {
 		opacity: 1;
@@ -517,7 +604,7 @@
 		opacity: 0;
 		visibility: hidden;
 		transition: all 0.3s ease;
-		z-index: 50;
+		z-index: 5000;
 		margin-bottom: 10px;
 	}
 	.tooltip-right::before {
@@ -529,7 +616,7 @@
 		width: 8px;
 		height: 8px;
 		background-color: rgba(0, 0, 0, 0.8);
-		z-index: 50;
+		z-index: 5000;
 	}
 	.tooltip-container:hover .tooltip-right {
 		opacity: 1;
@@ -629,16 +716,16 @@
 		border: 1px solid transparent;
 		position: relative;
 	}
-	.day_no{
+	.day_no {
 		position: absolute;
 		left: 50%;
 		top: 50%;
-		transform: translate(-50%,-50%);
+		transform: translate(-50%, -50%);
 		color: #94a3b8;
 		font-size: 1.5rem;
 		opacity: 0.8;
 	}
-	.slot{
+	.slot {
 		font-size: 0.8rem;
 		width: 100%;
 		min-width: 4rem;
@@ -646,12 +733,9 @@
 		min-height: 0.8rem;
 		border: 1px solid #e0e0e0;
 		border-radius: 4px;
-		margin:  2px 0;
+		margin: 2px 0;
 		text-align: center;
 		opacity: 0.8;
-	}
-	.fill_slot{
-		background-color: #bc42b0;
 	}
 	.slot:hover{
 		background-color: #f8f9fa;
@@ -660,6 +744,9 @@
 		border-color: #e5e7eb;
 		color: #1a1a1a;
 		z-index: 10;
+	}
+	.fill_slot {
+		background-color: #bc42b0;
 	}
 	.day:hover {
 		background-color: #f8f9fa;
@@ -717,4 +804,50 @@
 		overflow: hidden;
 		width: 100%;
 	}
+	.loading-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(255, 255, 255, 0.9);
+    z-index: 1000;
+  }
+
+  .loading-spinner-wrapper {
+    width: 80px;
+    height: 80px;
+    margin-bottom: 20px;
+  }
+
+  .loading-spinner {
+    width: 100%;
+    height: 100%;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #fbc400;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  .loading-text {
+    color: #666;
+    font-size: 1.2rem;
+    font-weight: 500;
+    margin-top: 10px;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+  }
 </style>

@@ -1,6 +1,6 @@
 import Database from '@tauri-apps/plugin-sql';
 import { writable } from 'svelte/store';
-import type { Reservation, ReservationDTO, Station, StationDTO, Test, TestDTO, Visting, VistingDTO } from '../biz/types';
+import type { Reservation, ReservationDTO, Sevent, Station, StationDTO, Test, TestDTO, Visting, VistingDTO } from '../biz/types';
 import { generateLargeAmountReservationData, generateLargeAmountStationData, generateLargeAmountVistingData } from './seedData';
 import { load, Store } from '@tauri-apps/plugin-store';
 import { AppError, ErrorCode } from '../biz/errors';
@@ -216,7 +216,22 @@ class Repository {
             throw new AppError(ErrorCode.DB_QUERY_ERROR, "查询工位失败", String(error));
         }
     }
-  
+    async getAllSevents(): Promise<Sevent[]> {
+        const database = await this.getDb();
+        try {
+            return await database.select('SELECT * FROM s_events order by created_on desc');
+        } catch (error) {
+            throw new AppError(ErrorCode.DB_QUERY_ERROR, "查询工位事件列表失败", String(error));
+        }
+    }
+    async getSeventsByStationId(id: number): Promise<Sevent[]> {
+        const database = await this.getDb();
+        try {
+            return await database.select('SELECT * FROM s_events WHERE station_id=$1 order by created_on desc', [id]);
+        } catch (error) {
+            throw new AppError(ErrorCode.DB_QUERY_ERROR, "查询工位事件列表失败", String(error));
+        }
+    }
 
     // sqls for visitings
     async getAllVistings(timeRange: string): Promise<Visting[]> {

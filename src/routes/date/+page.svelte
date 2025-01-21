@@ -3,6 +3,7 @@
   import { repository } from "../../biz/database";
   import type {
     Reservation,
+    Sevent,
     Station,
   } from "../../biz/types";
   import { goto } from "$app/navigation";
@@ -14,19 +15,24 @@
     import { errorHandler } from "../../biz/errorHandler";
     import Source from "../../components/Source.svelte";
     import type { AppError } from "../../biz/errors";
+    import { init } from "../../biz/operation";
+    import { get } from "svelte/store";
   let { data }: { data: PageData } = $props();
   
   const initDate = data.date ?? new Date().toISOString().split("T")[0];
   calendar.setDate(initDate);
   const selectedDate = $derived(calendar.selectedDate);
-  async function loadStations() {
+  async function loadStations(): Promise<Station[]> {
     let stations: Station[] = [];
     // stations=[]
     try{
 
       const stationEntities = await repository.getAllStations();
+      const sevents=await repository.getAllSevents();
       console.log(stationEntities)
+      //获取orders
       const orders:{id:number,seq:number}[]=getGlobal("station_orders");
+      //结合orders给stations排序
       if (orders&&orders.length>0&&stationEntities.length>0) {
         const sortedStations = stationEntities.map((station:Station) => {
           const seq=orders.find(o=>o.id===station.id)
@@ -36,9 +42,25 @@
       }else{
         stations=[...stationEntities]
       }
+      //结合sevents给stations添加状态
+      stations=stations.map(station=>{
+        const sevents_per_station=sevents.filter(sevent=>sevent.station_id===station.id)
+        if(sevents_per_station.length===0){
+          return {...station,status:'in_service'}
+        }else{
+          const isUnavailable=sevents_per_station.some(sevent=>new Date(get(selectedDate))>=new Date(sevent.from_date)&&new Date(get(selectedDate))<=new Date(sevent.to_date))
+          if(isUnavailable){
+            const unavailableSevent=sevents_per_station.find(sevent=>new Date(get(selectedDate))>=new Date(sevent.from_date)&&new Date(get(selectedDate))<=new Date(sevent.to_date))
+            return {...station,status:unavailableSevent?.name??'unavailable'}
+          }else{
+            return {...station,status:'in_service'}
+          }
+        }
+      })
       
       return stations
     }catch(e){
+
       errorHandler.handleError(e as AppError);
       return [];
     }
@@ -55,16 +77,30 @@
     }
   }
 
-  const init=async(date:string,loadingIndicator:number)=>{
+  const init_data=async(date:string,loadingIndicator:number)=>{
     
     const stations=await loadStations();
     console.log(stations)
     const res=await loadReservations(date);
-    console.log(res)
-    return {stations,res}
+    const sevents=await repository.getAllSevents();
+    return {stations,res,sevents}
   }
+
+
   let loadingIndicator = $state(0);
  
+  const ini_page=async()=>{
+    const user=getGlobal("user");
+    const tests=getGlobal("tests");
+    const project_engineers=getGlobal("project_engineers");
+    const test_engineers=getGlobal("testing_engineers");
+    if(!user||!tests||!project_engineers||!test_engineers){
+      await init();
+    }
+    // sleep for 3 seconds
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+  }
   
   // Add keyboard event listener for day navigation
   const handleKeydown = (event: KeyboardEvent) => {
@@ -97,7 +133,120 @@
   });
 </script>
 
+{#snippet showDayBlock(timeslot:string,station:Station,reservations:Reservation[],sevents:Sevent[])}
+<td
+class="fixed-width"
+class:station-unavailable={station.status!=='in_service'}
+style="text-align:left;font-size:12px;"
+>
+{#if station.status!=='in_service'}
+  <button
+    class="tooltip-container unavailable-cell"
+    onclick={() =>errorHandler.showInfo("工位不可用")}
+  >
+    <span class={`${timeslot === 'T5' ? "tooltip-top" : "tooltip"}`}>工位不可用</span>
+    <svg
+      class="logo"
+      style="fill: #fbc400;opacity:0.8"
+      viewBox="0 0 1024 1024"
+      version="1.1"
+      xmlns="http://www.w3.org/2000/svg"
+      width="200"
+      height="200"
+      ><path
+        d="M821.344 458.656v106.688H202.656v-106.688h618.688zM1024 512c0 282.784-229.216 512-512 512S0 794.784 0 512 229.216 0 512 0s512 229.216 512 512z m-85.344 0c0-235.264-191.392-426.656-426.656-426.656S85.344 276.736 85.344 512 276.736 938.656 512 938.656 938.656 747.264 938.656 512z"
+      ></path></svg
+    >
+    <span style="font-size: 0.8rem;margin-top:0.5rem" class="first-letter-capital">{station.status.replaceAll("_"," ")}</span>
+  </button>
+{:else}
+  {#await Promise.resolve(reservations.filter((f) => f.time_slot === timeslot && f.station_id === station.id)[0])}
+    <div>Loading...</div>
+  {:then reservation}
+    {#if reservation}
+      <button
+      style="gap: 5px; display: flex; flex-direction: column; align-items: center; width: 100%;"
+        class="tooltip-container"
+        onclick={()=>{
+          modalStore.open(ReservationInfo, {
+            reservation
+          });
+        }}
+      >
+        <span class={timeslot === 'T5' ? "tooltip-top" : "tooltip"}
+          >点击查看预约</span
+        >
+        <div class="engineer-info" style="display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.75rem;">
+          <div class="engineer-item" style="display: flex; align-items: center; gap: 0.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            <span class="badge" style="background-color: #e2e8f0; color: #475569; padding: 0.125rem 0.25rem; border-radius: 0.25rem; font-size: 0.7rem; font-weight: 600; flex-shrink: 0;">PE</span>
+            <span class="name" style="color: #1e293b; overflow: hidden; text-overflow: ellipsis;">{reservation.project_engineer}</span>
+          </div>
+          <div class="engineer-item" style="display: flex; align-items: center; gap: 0.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            <span class="badge" style="background-color: #e2e8f0; color: #475569; padding: 0.125rem 0.25rem; border-radius: 0.25rem; font-size: 0.7rem; font-weight: 600; flex-shrink: 0;">TE</span>
+            <span class="name" style="color: #1e293b; overflow: hidden; text-overflow: ellipsis;">{reservation.testing_engineer}</span>
+          </div>
+        </div>
+        {#if reservation.job_no||reservation.product_name||reservation.client_name}
+        <div class="divider"></div>
+        {#if reservation.job_no}
+        <div style="font-size: smaller; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">
+          <!-- <span style="font-weight:bold;">Job No.:</span
+          > -->
+          {reservation.job_no}
+        </div>
+        {/if}
+        {#if reservation.product_name}
+          <div style="font-size: smaller; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">
+            <!-- <span style="font-weight:bold;">Product:</span
+            > -->
+            {reservation.product_name}
+          </div>
+        {/if}
+        {#if reservation.client_name}
+          <div style="font-size: smaller; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">
+            <!-- <span style="font-weight:bold;">Client:</span
+            > -->
+            {reservation.client_name}
+          </div>
+        {/if}
+        {/if}
+      </button>
+    {:else}
+      <button
+        class="tooltip-container coffee-btn"
+        aria-label="open_new"
+       
+      >
+        <span class={timeslot === 'T5' ? "tooltip-top" : "tooltip"}
+          >无预约</span
+        >
+        <svg
+          class="logo spare"
+          viewBox="0 0 1024 1024"
+          version="1.1"
+          xmlns="http://www.w3.org/2000/svg"
+          width="200"
+          height="200"
+          ><path
+            d="M797.994667 448.725333v123.306667a243.626667 243.626667 0 0 1-243.626667 243.669333H371.626667A243.626667 243.626667 0 0 1 128 572.074667V358.826667c0-16.810667 13.653333-30.421333 30.464-30.421334h119.381333C292.096 319.146667 298.666667 305.408 298.666667 285.184c0-13.098667-6.058667-23.253333-25.344-44.928l-3.541334-4.010667c-23.125333-26.112-32.725333-42.538667-32.554666-67.114666 0.256-37.333333 15.658667-65.536 45.482666-81.322667a21.333333 21.333333 0 0 1 19.968 37.717333c-15.232 8.064-22.613333 21.589333-22.784 43.946667-0.085333 10.581333 5.376 19.925333 21.845334 38.485333l3.498666 3.968c25.984 29.226667 36.096 46.08 36.096 73.258667 0 16.128-2.986667 30.634667-8.874666 43.264h116.010666c14.250667-9.301333 20.864-23.04 20.864-43.264 0-13.098667-6.058667-23.253333-25.344-44.928l-3.541333-4.010667c-23.125333-26.112-32.725333-42.538667-32.554667-67.114666 0.256-37.333333 15.658667-65.536 45.482667-81.322667a21.333333 21.333333 0 1 1 19.968 37.717333c-15.232 8.064-22.613333 21.589333-22.784 43.946667-0.085333 10.581333 5.376 19.925333 21.845333 38.485333l3.498667 3.968c25.984 29.226667 36.096 46.08 36.096 73.258667 0 16.128-2.986667 30.634667-8.874667 43.264h93.696c16.853333 0 30.464 13.610667 30.464 30.421333v46.976A149.333333 149.333333 0 1 1 810.666667 704a21.333333 21.333333 0 1 1 0-42.666667 106.666667 106.666667 0 1 0-12.672-212.608zM213.333333 917.333333a21.333333 21.333333 0 1 1 0-42.666666h512a21.333333 21.333333 0 1 1 0 42.666666H213.333333z"
+        ></path></svg
+      >
+    </button>
+    {/if}
+  {/await}
+{/if}
+</td>
+{/snippet}
+
 <main class="container">
+  {#await ini_page()}
+  <div class="loading-container">
+    <div class="loading-spinner-wrapper">
+      <div class="loading-spinner"></div>
+    </div>
+    <span class="loading-text">加载中...</span>
+  </div>
+{:then _} 
   <div class="fixed-header">
     <button
       aria-label="calendar_view"
@@ -186,7 +335,7 @@
 
   <div class="table-container">
     <div class="table-wrapper">
-      {#await init($selectedDate,loadingIndicator)}
+      {#await init_data($selectedDate,loadingIndicator)}
         <div>Loading...</div>
       {:then obj}
         <table>
@@ -199,7 +348,7 @@
                   class:station-unavailable={station.status !== "in_service"}
                 >
                   <span class="tooltip">点击查看工位详情</span>
-                  <a title={station.name} href={`/station?stationId=${station.id}`} class="link">
+                  <a title={station.name} href={`/station?stationId=${station.id}&date=${$selectedDate}`} class="link">
                     {station.short_name}
                   </a>
                 </th>
@@ -211,101 +360,7 @@
               <tr>
                 <td class="sticky-column">{timeSlot}</td>
                 {#each obj.stations as station}
-                  <td
-                    class="fixed-width"
-                    class:station-unavailable={station.status !== "in_service"}
-                    style="text-align:left;font-size:12px;"
-                  >
-                    {#if station.status !== "in_service"}
-                      <button
-                        class="tooltip-container unavailable-cell"
-                        onclick={() => alert(`该工位当前状态：维护中`)}
-                      >
-                        <span class="tooltip">工位不可用</span>
-                        <svg
-                          class="logo"
-                          style="fill: #fbc400;opacity:0.6"
-                          viewBox="0 0 1024 1024"
-                          version="1.1"
-                          xmlns="http://www.w3.org/2000/svg"
-                          width="200"
-                          height="200"
-                          ><path
-                            d="M821.344 458.656v106.688H202.656v-106.688h618.688zM1024 512c0 282.784-229.216 512-512 512S0 794.784 0 512 229.216 0 512 0s512 229.216 512 512z m-85.344 0c0-235.264-191.392-426.656-426.656-426.656S85.344 276.736 85.344 512 276.736 938.656 512 938.656 938.656 747.264 938.656 512z"
-                          ></path></svg
-                        >
-                      </button>
-                    {:else}
-                      {#await Promise.resolve(obj.res.filter((f) => f.time_slot === `T${idx + 1}` && f.station_id === station.id)[0])}
-                        <div>Loading...</div>
-                      {:then reservation}
-                        {#if reservation}
-                          <button
-                            class="tooltip-container"
-                            style="gap: 5px; display: flex; flex-direction: column; align-items: center; width: 100%;"
-                            onclick={() =>
-                              modalStore.open(ReservationInfo, {
-                                onNegative: () => modalStore.close(),
-                                reservation: reservation,
-                              })}
-                          >
-                            <span class={idx === 4 ? "tooltip-top" : "tooltip"}
-                              >点击查看预约</span
-                            >
-                            <div style="font-size: smaller;font-weight:bold; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">
-                              <!-- <span style="font-weight:bold;">PE:</span
-                              > -->
-                              {reservation.project_engineer}
-                            </div>
-                            {#if reservation.job_no}
-                            <div style="font-size: smaller; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">
-                              <!-- <span style="font-weight:bold;">Job No.:</span
-                              > -->
-                              {reservation.job_no}
-                            </div>
-                            {/if}
-                            {#if reservation.product_name}
-                              <div style="font-size: smaller; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">
-                                <!-- <span style="font-weight:bold;">Product:</span
-                                > -->
-                                {reservation.product_name}
-                              </div>
-                            {/if}
-                            {#if reservation.client_name}
-                              <div style="font-size: smaller; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">
-                                <!-- <span style="font-weight:bold;">Client:</span
-                                > -->
-                                {reservation.client_name}
-                              </div>
-                            {/if}
-                          </button>
-                        {:else}
-                          <button
-                            class="tooltip-container coffee-btn"
-                            aria-label="open_new"
-                            onclick={() =>{
-                            errorHandler.showInfo("暂无预约")
-                            }}
-                          >
-                            <span class={idx === 4 ? "tooltip-top" : "tooltip"}
-                              >暂无预约</span
-                            >
-                            <svg
-                              class="logo spare"
-                              viewBox="0 0 1024 1024"
-                              version="1.1"
-                              xmlns="http://www.w3.org/2000/svg"
-                              width="200"
-                              height="200"
-                              ><path
-                                d="M797.994667 448.725333v123.306667a243.626667 243.626667 0 0 1-243.626667 243.669333H371.626667A243.626667 243.626667 0 0 1 128 572.074667V358.826667c0-16.810667 13.653333-30.421333 30.464-30.421334h119.381333C292.096 319.146667 298.666667 305.408 298.666667 285.184c0-13.098667-6.058667-23.253333-25.344-44.928l-3.541334-4.010667c-23.125333-26.112-32.725333-42.538667-32.554666-67.114666 0.256-37.333333 15.658667-65.536 45.482666-81.322667a21.333333 21.333333 0 0 1 19.968 37.717333c-15.232 8.064-22.613333 21.589333-22.784 43.946667-0.085333 10.581333 5.376 19.925333 21.845334 38.485333l3.498666 3.968c25.984 29.226667 36.096 46.08 36.096 73.258667 0 16.128-2.986667 30.634667-8.874666 43.264h116.010666c14.250667-9.301333 20.864-23.04 20.864-43.264 0-13.098667-6.058667-23.253333-25.344-44.928l-3.541333-4.010667c-23.125333-26.112-32.725333-42.538667-32.554667-67.114666 0.256-37.333333 15.658667-65.536 45.482667-81.322667a21.333333 21.333333 0 1 1 19.968 37.717333c-15.232 8.064-22.613333 21.589333-22.784 43.946667-0.085333 10.581333 5.376 19.925333 21.845333 38.485333l3.498667 3.968c25.984 29.226667 36.096 46.08 36.096 73.258667 0 16.128-2.986667 30.634667-8.874667 43.264h116.010667c14.250667-9.301333 20.864-23.04 20.864-43.264 0-13.098667-6.058667-23.253333-25.344-44.928l-3.541333-4.010667c-23.125333-26.112-32.725333-42.538667-32.554667-67.114666 0.256-37.333333 15.658667-65.536 45.482667-81.322667a21.333333 21.333333 0 1 1 19.968 37.717333c-15.232 8.064-22.613333 21.589333-22.784 43.946667-0.085333 10.581333 5.376 19.925333 21.845333 38.485333l3.498667 3.968c25.984 29.226667 36.096 46.08 36.096 73.258667 0 16.128-2.986667 30.634667-8.874667 43.264h93.696c16.853333 0 30.464 13.610667 30.464 30.421333v46.976A149.333333 149.333333 0 1 1 810.666667 704a21.333333 21.333333 0 1 1 0-42.666667 106.666667 106.666667 0 1 0-12.672-212.608zM213.333333 917.333333a21.333333 21.333333 0 1 1 0-42.666666h512a21.333333 21.333333 0 1 1 0 42.666666H213.333333z"
-                              ></path></svg
-                            >
-                          </button>
-                        {/if}
-                      {/await}
-                    {/if}
-                  </td>
+                  {@render showDayBlock(`T${idx + 1}`,station,obj.res,obj.sevents)}
                 {/each}
               </tr>
             {/each}
@@ -314,6 +369,9 @@
       {/await}
     </div>
   </div>
+  {:catch error}
+    <div>{"Error: " + error.message}</div>
+  {/await}
 </main>
 
 <style>
@@ -602,13 +660,16 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    cursor: not-allowed;
+    cursor: pointer;
   }
 
   .unavailable-cell:hover {
     background-color: rgba(114, 28, 36, 0.1);
   }
 
+  .unavailable-cell:hover svg.logo {
+    fill: rgb(194, 187, 187) !important;
+  }
   /* 确保固定列的表头样式正确 */
   th.sticky-column.station-unavailable {
     background-color: #f8d7da;

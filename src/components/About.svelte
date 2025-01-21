@@ -1,13 +1,15 @@
 <script lang="ts">
   import { modalStore } from './modalStore';
-  let { onNegative } = $props();
+  let { onNegative } = $modalStore.props;
+  
 </script>
 
 <div class="about-container">
+  <button class="close-button" onclick={onNegative}>关闭</button>
   <h3>关于 EMC 预约系统</h3>
   
   <div class="content">
-    <p class="version">版本：v20250101</p>
+    <p class="version">版本：Client v20250121</p>
     
     <div class="section">
       <h4>系统说明</h4>
@@ -22,15 +24,22 @@
           <li>支持按工位查看预约</li>
           <li>支持按日期查看预约</li>
           <li>预约信息详情展示</li>
+          <li>支持数据源快速更换</li>
           <li style="color: orange;">支持预约创建、修改、删除</li>
+          <li style="color: orange;">支持多时段预约创建</li>
           <li style="color: orange;">支持工位创建、修改、删除</li>
+          <li style="color: orange;">支持工位复制式创建</li>
+          <li style="color: orange;">支持工位拖曳排序</li>
           <li style="color: orange;">支持测试内容自定义</li>
           <li style="color: orange;">支持人员自定义</li>
           <li style="color: orange;">支持访问记录查询</li>
+          <li style="color: orange;">支持测试工位智能适配</li>
+          <li style="color: orange;">支持数据导出</li>
+          <li style="color: orange;">支持数据图谱展示（待开发）</li>
         </ul>
         <div style="padding-left: 3rem;">
             <span style="width: 10px; height: 10px; display: inline-block; background-color: orange;"></span>
-            <div style="display: inline-block; color: orange;">仅管理员端含此功能</div>
+            <div style="display: inline-block; color: orange;">仅管理员端和工程师端含此功能</div>
       </div>
       </div>
     </div>
@@ -58,6 +67,7 @@
     font-size: 14px;
     max-width: 500px;
     margin: 0 auto;
+    position: relative;
   }
 
   h3 {
@@ -147,5 +157,18 @@
 
   p {
     line-height: 1.6;
+  }
+  .close-button {
+    position: absolute;
+    top: 0;
+    right: 0;
+    margin: 0.5rem;
+    padding: 0.5rem;
+    border: none;
+    background-color: transparent;
+    cursor: pointer;
+  }
+  .close-button:hover {
+    color: #bcb6b6;
   }
 </style>
