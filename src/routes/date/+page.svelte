@@ -32,6 +32,7 @@
       console.log(stationEntities)
       //获取orders
       const orders:{id:number,seq:number}[]=getGlobal("station_orders");
+      console.log(orders)
       //结合orders给stations排序
       if (orders&&orders.length>0&&stationEntities.length>0) {
         const sortedStations = stationEntities.map((station:Station) => {
@@ -649,11 +650,11 @@ style="text-align:left;font-size:12px;"
   }
 
   .station-unavailable {
-    background-color: #f8d7da !important; /* 浅红色背景 */
+    background-color: #dfdee4 !important; /* 浅红色背景 */
   }
 
   .unavailable-cell {
-    color: #721c24;
+    color: #dbdbe0;
     background-color: transparent;
     width: 100%;
     height: 100%;
@@ -683,5 +684,51 @@ style="text-align:left;font-size:12px;"
   }
   .spare:hover {
     fill: #fbc400;
+  }
+  .loading-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(255, 255, 255, 0.9);
+    z-index: 1000;
+  }
+
+  .loading-spinner-wrapper {
+    width: 80px;
+    height: 80px;
+    margin-bottom: 20px;
+  }
+
+  .loading-spinner {
+    width: 100%;
+    height: 100%;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #fb9040;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  .loading-text {
+    color: #666;
+    font-size: 1.2rem;
+    font-weight: 500;
+    margin-top: 10px;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
   }
 </style>

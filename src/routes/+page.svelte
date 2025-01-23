@@ -9,11 +9,12 @@
   import { exists, readTextFile } from "@tauri-apps/plugin-fs";
   import { message, open } from "@tauri-apps/plugin-dialog";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import { setGlobal } from "../biz/globalStore";
+  import { getGlobal, setGlobal } from "../biz/globalStore";
     import { modalStore } from "../components/modalStore";
     import { errorHandler } from "../biz/errorHandler";
     import About from "../components/About.svelte";
     import type { AppError } from "../biz/errors";
+    import { init } from "../biz/operation";
   // 使用calendar实例的store
   const currentMonth = calendar.currentMonth;
 
@@ -69,68 +70,16 @@
   //   }
   // }
  
-  const init = async () => {
-    const store = await load("settings.json");
-    const lastUser: User | undefined = await store.get<User>("user");
-    const u: string = await invoke("check_user");
-    const currentUser: User = JSON.parse(u);
-    // Always update the user data
-    await store.set("user", {
-      machine: currentUser.machine,
-      user: currentUser.user,
-    });
-    setGlobal("user", { machine: currentUser.machine, user: currentUser.user });
-    // logVisiting(currentUser);
-    
-    const remote_source: string | undefined =
-      await store.get<string>("remote_source");
-    console.log(remote_source);
-    let source_valid = false;
-    if (remote_source) {
-      const dbConnected = await exists(`${remote_source}\\data\\data.db`);
-      const settingConnected = await exists(`${remote_source}\\settings.json`);
-      console.log(dbConnected, settingConnected);
-      if (dbConnected && settingConnected) {
-        source_valid = true;
-      } else {
-        source_valid = false;
-        errorHandler.showWarning(
-          "远程数据源不可用,无法使用本软件，请重新设置远程数据源，然后重启软件");
-      }
+  const init_page=async()=>{
+    const user=getGlobal("user");
+    const tests=getGlobal("tests");
+    const project_engineers=getGlobal("project_engineers");
+    const test_engineers=getGlobal("testing_engineers");
+    if(!user||!tests||!project_engineers||!test_engineers){
+      await init();
     }
-    if (!source_valid) {
-      const result = await open({
-        title: "远程数据源未设置或不可用，请选择远程数据源或退出",
-        directory: true,
-      });
-      if (result) {
-        await store.set("remote_source", result);
-        await message("已设置远程数据源,请重启软件已生效！");
-      } else {
-        await message("没有选择远程数据源或者远程数据源暂时不可用,无法使用本软件，软件将退出！");
-      }
-      const window = await getCurrentWindow();
-      await window.close();
-      return;
-    }
-    setGlobal("remote_source", remote_source);
-    console.log("source valid");
-    const settings = await readTextFile(`${remote_source}\\settings.json`);
-    const config = JSON.parse(settings);
-    console.log(config);
-    const station_order: {id:number,seq:number}[] | undefined = await store.get<{id:number,seq:number}[]>("station_orders");
-    if (station_order) {
-      setGlobal("station_orders", station_order);
-    }
-    setGlobal("tests", config.tests || []);
-    setGlobal("project_engineers", config.project_engineers || []);
-    setGlobal("testing_engineers", config.testing_engineers || []);
-    setGlobal("loadSetting", config.loadSetting || {});
-    await store.set("tests", config.tests || []);
-    await store.set("project_engineers", config.project_engineers || []);
-    await store.set("testing_engineers", config.testing_engineers || []);
-    await store.set("loadSetting", config.loadSetting || {});
-  };
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
   // Add keyboard event listener for month navigation
   const handleKeydown = (event: KeyboardEvent) => {
     
@@ -151,7 +100,7 @@
 </script>
 
 <div class="page-container">
-  {#await init()}
+  {#await init_page()}
     <div class="loading-container">
       <div class="loading-spinner"></div>
       <span class="loading-text">加载中...</span>

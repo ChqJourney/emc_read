@@ -301,7 +301,16 @@ class Repository {
             throw new AppError(ErrorCode.DB_TRANSACTION_ERROR, "删除访客记录失败", String(error));
         }
     }
-
+    async checkDb(){
+        const database = await this.getDb();
+        try {
+          await database.select(`SELECT 1`);
+          return true;
+        } catch (error) {
+            console.log(error);
+          return false;
+        }
+      }
 
     // 添加关闭数据库的方法
     async closeDatabase() {
