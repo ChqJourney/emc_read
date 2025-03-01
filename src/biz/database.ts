@@ -8,58 +8,6 @@ import { AppError, ErrorCode } from '../biz/errors';
 // 创建一个可写的 store 来存储数据库连接
 const db = writable<Database | null>(null);
 
-// 初始化数据库连接
-async function initDatabase() {
-    const store = await load("settings.json");
-    const remote_source = await store.get<string>("remote_source");
-    console.log(remote_source);
-    if (!remote_source || remote_source.trim() === "") {
-        throw new Error("未设置远程数据源");
-    }
-    const dbString = `sqlite:${remote_source}\\data\\data.db?mode=rwc&cache=private`;
-    // let connection_string=await invoke('get_db_connection_string');
-    try {
-        const database = await Database.load(dbString);
-        db.set(database);
-
-        // 检查是否需要填充数据
-        await seedDataIfNeeded(database);
-
-        console.log('Database initialized successfully');
-    } catch (error) {
-        console.error('Failed to initialize database:', error);
-    }
-}
-
-// 添加数据填充函数
-async function seedDataIfNeeded(database: Database) {
-    // const isDev = import.meta.env.DEV;
-    // if (!isDev) return;
-    // 检查是否已经有数据
-    const stations = await repository.getAllStations();
-    if (stations.length === 0) {
-        // 填充工位数据
-        const defaultStations: StationDTO[] = await generateLargeAmountStationData();
-
-        for (const station of defaultStations) {
-            await repository.createStation(station as Station);
-        }
-
-        // 填充一些示例预约数据
-        const today = new Date().toISOString().split('T')[0];
-        const tomorrow = new Date(new Date().getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        const sampleReservations: ReservationDTO[] = await generateLargeAmountReservationData();
-
-        for (const reservation of sampleReservations) {
-            await repository.createReservation(reservation as Reservation);
-        }
-        // 填充一些示例访问记录数据
-        const sampleVistings: VistingDTO[] = await generateLargeAmountVistingData();
-        for (const visting of sampleVistings) {
-            await repository.createVisting(visting as Visting);
-        }
-    }
-}
 
 // 创建 Repository 类
 class Repository {
@@ -115,7 +63,7 @@ class Repository {
                 throw new Error("未设置远程数据源");
             }
             
-            const dbString = `sqlite:${remote_source}\\data\\data.db?mode=ro&immutable=1&cache=private`;
+            const dbString = `sqlite:${remote_source}\\data\\newdata.db?mode=ro&immutable=1&cache=private`;
             this.database = await Database.load(dbString);
             
             // 设置WAL模式和其他优化

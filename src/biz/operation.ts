@@ -7,7 +7,7 @@ import { exists, readTextFile } from "@tauri-apps/plugin-fs";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 const check_database_available=async(remote_source:string)=>{
-  const dbConnected = await exists(`${remote_source}\\data\\data.db`);
+  const dbConnected = await exists(`${remote_source}\\data\\newdata.db`);
   if (dbConnected) {
     const dbNormal=await repository.checkDb();
     console.log(dbNormal)
